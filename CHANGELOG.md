@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.7.1](https://github.com/sethbacon/terraform-suite-ui/compare/v0.7.0...v0.7.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **identity:** hydrate the session under StrictMode's dev double-mount ([#89](https://github.com/sethbacon/terraform-suite-ui/issues/89)) ([40b19a4](https://github.com/sethbacon/terraform-suite-ui/commit/40b19a49bf40509985d89c1a6a9bce8dd0b1de23))
+
 ## [0.7.0](https://github.com/sethbacon/terraform-suite-ui/compare/v0.6.1...v0.7.0) (2026-07-23)
 
 
