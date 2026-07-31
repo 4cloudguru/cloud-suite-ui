@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import { AuthProvider, useAuth, ADMIN_SCOPE, sanitizeAuthError } from './AuthProvider'
@@ -42,6 +43,29 @@ describe('AuthProvider', () => {
       <AuthProvider api={api}>
         <Probe />
       </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+    expect(screen.getByTestId('name')).toHaveTextContent('Ada')
+    expect(screen.getByTestId('scope')).toHaveTextContent('true')
+  })
+
+  // Regression guard: StrictMode's dev double-mount reuses the component instance, so the
+  // mounted ref survived the first cleanup latched false and the remount's getCurrentUser()
+  // result was discarded — every consuming app rendered signed-out under vite dev despite a
+  // valid session. Production (no StrictMode double-mount) was unaffected, so only a
+  // StrictMode-wrapped render catches this.
+  it('hydrates the session under React.StrictMode (dev double-mount)', async () => {
+    const api = makeApi({
+      user: { id: '1', email: 'a@b.com', name: 'Ada' },
+      memberships: [],
+      allowed_scopes: ['state:read'],
+    })
+    render(
+      <StrictMode>
+        <AuthProvider api={api}>
+          <Probe />
+        </AuthProvider>
+      </StrictMode>,
     )
     await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
     expect(screen.getByTestId('name')).toHaveTextContent('Ada')
