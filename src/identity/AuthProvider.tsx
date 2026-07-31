@@ -136,14 +136,18 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
     setSessionExpiresSoon(false)
   }, [clearWarnTimer])
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Re-arm on every effect run, not just via the initializer: StrictMode's dev double-mount
+    // (mount -> cleanup -> remount) reuses the same component instance, so the ref survives the
+    // first cleanup. Without this line the flag latches false and the remount's getCurrentUser()
+    // result is discarded — the session never hydrates under vite dev.
+    mounted.current = true
+    return () => {
       mounted.current = false
       generation.current++
       clearWarnTimer()
-    },
-    [clearWarnTimer],
-  )
+    }
+  }, [clearWarnTimer])
 
   const applyMe = useCallback(
     (me: MeResponse) => {
