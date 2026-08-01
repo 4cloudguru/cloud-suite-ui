@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.8.0](https://github.com/sethbacon/terraform-suite-ui/compare/v0.7.1...v0.8.0) (2026-08-01)
+
+
+### Features
+
+* **components:** add BrandingSettingsCard ([#92](https://github.com/sethbacon/terraform-suite-ui/issues/92)) ([3c37f61](https://github.com/sethbacon/terraform-suite-ui/commit/3c37f61ebdb1264b2ea541da1826d6ea52fc9b8e))
+
 ## [0.7.1](https://github.com/sethbacon/terraform-suite-ui/compare/v0.7.0...v0.7.1) (2026-07-31)
 
 
