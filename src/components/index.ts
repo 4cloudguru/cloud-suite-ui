@@ -14,3 +14,11 @@ export type {
 } from './NotificationChannelsSection'
 export { ApiKeyExpirySettingsCard } from './ApiKeyExpirySettingsCard'
 export type { ApiKeyExpirySettingsCardProps, ApiKeyExpirySettingsValue, ApiKeyExpirySettingsInput } from './ApiKeyExpirySettingsCard'
+export { BrandingSettingsCard } from './BrandingSettingsCard'
+export type {
+  BrandingSettingsCardProps,
+  BrandingSettingsCardStrings,
+  BrandingFieldKey,
+  BrandingFieldLabel,
+  BrandingValidators,
+} from './BrandingSettingsCard'
