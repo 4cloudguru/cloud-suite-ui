@@ -13,6 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { useSeedFromKey } from '../utils/useSeedFromKey'
 
 /** The current API-key-expiry notification settings. */
 export interface ApiKeyExpirySettingsValue {
@@ -52,18 +53,16 @@ export function ApiKeyExpirySettingsCard({ value, isLoading = false, canManage =
   const [warningDays, setWarningDays] = useState(value.warningDays)
   const [checkIntervalHours, setCheckIntervalHours] = useState(value.checkIntervalHours)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [notice, setNotice] = useState<{ severity: 'success' | 'error'; text: string } | null>(null)
 
-  // Re-seed the local edit state from props whenever the loaded value's identity
-  // changes — the initial load AND any later change (e.g. a background refetch
-  // surfacing a newer server value), keyed on the value's contents. A one-shot
-  // boolean would seed only once and then silently show stale values after the
-  // first load. Mirrors ChannelFormDialog's seedKey pattern. An unchanged value
-  // (same key) does not re-seed, so a user's in-progress edits are preserved.
-  const [seededFor, setSeededFor] = useState<string | null>(null)
+  // Re-seed the local edit state from props whenever the loaded value's contents change — the
+  // initial load AND any later change (e.g. a background refetch, or another admin's concurrent
+  // edit, surfacing a newer server value). Suppressed while `dirty` (an in-progress, unsaved
+  // local edit) so a concurrent server-side change never silently clobbers it.
   const seedKey = isLoading ? null : `${value.apiKeyExpiring}|${value.warningDays}|${value.checkIntervalHours}`
-  if (seedKey !== null && seededFor !== seedKey) {
-    setSeededFor(seedKey)
+  const [shouldSeed] = useSeedFromKey(seedKey, dirty)
+  if (shouldSeed) {
     setApiKeyExpiring(value.apiKeyExpiring)
     setWarningDays(value.warningDays)
     setCheckIntervalHours(value.checkIntervalHours)
@@ -73,6 +72,7 @@ export function ApiKeyExpirySettingsCard({ value, isLoading = false, canManage =
     setSaving(true)
     try {
       await onSave({ apiKeyExpiring, warningDays, checkIntervalHours })
+      setDirty(false)
       setNotice({ severity: 'success', text: t('apiKeyExpiry.saveSuccess', { defaultValue: 'Settings saved.' }) })
     } catch (e) {
       setNotice({
@@ -122,7 +122,10 @@ export function ApiKeyExpirySettingsCard({ value, isLoading = false, canManage =
               <Switch
                 checked={apiKeyExpiring}
                 disabled={!canManage}
-                onChange={(e) => setApiKeyExpiring(e.target.checked)}
+                onChange={(e) => {
+                  setApiKeyExpiring(e.target.checked)
+                  setDirty(true)
+                }}
                 slotProps={{ input: { 'aria-label': t('apiKeyExpiry.enable', { defaultValue: 'Send expiry warning emails' }) } }}
               />
               <Typography variant="body2">{t('apiKeyExpiry.enable', { defaultValue: 'Send expiry warning emails' })}</Typography>
@@ -137,7 +140,10 @@ export function ApiKeyExpirySettingsCard({ value, isLoading = false, canManage =
               value={warningDays}
               disabled={!canManage}
               slotProps={{ htmlInput: { min: 1 } }}
-              onChange={(e) => setWarningDays(Number(e.target.value))}
+              onChange={(e) => {
+                setWarningDays(Number(e.target.value))
+                setDirty(true)
+              }}
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -149,7 +155,10 @@ export function ApiKeyExpirySettingsCard({ value, isLoading = false, canManage =
               value={checkIntervalHours}
               disabled={!canManage}
               slotProps={{ htmlInput: { min: 1 } }}
-              onChange={(e) => setCheckIntervalHours(Number(e.target.value))}
+              onChange={(e) => {
+                setCheckIntervalHours(Number(e.target.value))
+                setDirty(true)
+              }}
               helperText={t('apiKeyExpiry.checkIntervalHelp', {
                 defaultValue: 'Changes to this value take effect after the next restart.',
               })}

@@ -114,4 +114,27 @@ describe('ApiKeyExpirySettingsCard', () => {
     rerender(<ApiKeyExpirySettingsCard value={{ ...baseValue }} onSave={() => Promise.resolve()} />)
     expect(screen.getByLabelText(/Warn this many days before expiry/)).toHaveValue(30)
   })
+
+  // Regression guard (data loss bug): a concurrent server-side change (another admin's edit, or
+  // a background refetch surfacing newer data) must not silently clobber an in-progress, unsaved
+  // local edit. Before this fix, the seed key was recomputed from props alone with no way to know
+  // an edit was in flight, so ANY value-prop change — including a genuine concurrent update —
+  // immediately overwrote whatever the admin was mid-typing.
+  it('does not clobber an in-progress edit when the value prop changes concurrently (data loss guard)', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ApiKeyExpirySettingsCard value={baseValue} onSave={() => Promise.resolve()} />)
+
+    const interval = screen.getByLabelText(/Check for expiring keys every/)
+    await user.clear(interval)
+    await user.type(interval, '48')
+    expect(interval).toHaveValue(48)
+
+    // Simulate a concurrent server-side change to a DIFFERENT field arriving mid-edit.
+    rerender(<ApiKeyExpirySettingsCard value={{ ...baseValue, warningDays: 14 }} onSave={() => Promise.resolve()} />)
+
+    // The admin's unsaved edit must survive...
+    expect(screen.getByLabelText(/Check for expiring keys every/)).toHaveValue(48)
+    // ...and the view must not silently jump out from under them either.
+    expect(screen.getByLabelText(/Warn this many days before expiry/)).toHaveValue(7)
+  })
 })

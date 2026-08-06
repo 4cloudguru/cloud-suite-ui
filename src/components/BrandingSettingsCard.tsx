@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { UIThemeConfig } from '../theme'
+import { useSeedFromKey } from '../utils/useSeedFromKey'
 
 export type BrandingFieldKey = keyof UIThemeConfig
 
@@ -104,15 +105,15 @@ export function BrandingSettingsCard({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
 
-  // Re-seed local edit state from props whenever the loaded value's contents
-  // change — the initial load AND any later change (e.g. a background refetch
-  // surfacing another admin's edit). An unchanged value does not re-seed, so a
-  // user's in-progress edits survive. Mirrors ApiKeyExpirySettingsCard.
-  const [seededFor, setSeededFor] = useState<string | null>(null)
+  // Re-seed local edit state from props whenever the loaded value's contents change — the
+  // initial load AND any later change (e.g. a background refetch surfacing another admin's
+  // edit). Suppressed while `dirty` (an in-progress, unsaved local edit) so a concurrent
+  // server-side change never silently clobbers it. Mirrors ApiKeyExpirySettingsCard.
   const seedKey = isLoading ? null : FIELDS.map((f) => value[f.key] ?? '').join('|')
-  if (seedKey !== null && seededFor !== seedKey) {
-    setSeededFor(seedKey)
+  const [shouldSeed] = useSeedFromKey(seedKey, dirty)
+  if (shouldSeed) {
     setForm(value)
   }
 
@@ -130,6 +131,7 @@ export function BrandingSettingsCard({
     try {
       await onSave(config)
       setForm(config)
+      setDirty(false)
       setSaved(true)
       setError(null)
     } catch (e) {
@@ -190,6 +192,7 @@ export function BrandingSettingsCard({
                 placeholder={f.kind === 'color' ? '#0a6e31' : undefined}
                 onChange={(e) => {
                   setSaved(false)
+                  setDirty(true)
                   setForm((prev) => ({ ...prev, [f.key]: e.target.value }))
                 }}
                 slotProps={{

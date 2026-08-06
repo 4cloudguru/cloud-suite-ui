@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { Card, CardActionArea, CardContent, Tooltip, Typography } from '@mui/material'
+import { resolveRoutePath } from '../utils/url'
 
 export interface DashboardCardProps {
   label: string
@@ -31,7 +32,7 @@ export function DashboardCard({ label, value, hint, to }: DashboardCardProps) {
   return (
     <Card variant="outlined">
       {to ? (
-        <CardActionArea component={RouterLink} to={to}>
+        <CardActionArea component={RouterLink} to={resolveRoutePath(to, '/', 'DashboardCard')}>
           {content}
         </CardActionArea>
       ) : (

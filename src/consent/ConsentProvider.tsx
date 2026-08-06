@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { safeGetItem, safeSetItem, warnIfDefaultKey } from '../utils/storage'
 
 export interface ConsentPreferences {
@@ -75,6 +75,9 @@ export function ConsentProvider({ children, storageKey = DEFAULT_CONSENT_KEY }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only
   }, [])
 
+  // Deliberately never cleared on sign-out or any other session-termination path (unlike
+  // SuiteLayout's nav-group state): a consent decision is scoped to this origin, not to a
+  // session, so it's correct for it to outlive logout rather than reprompting the next session.
   useEffect(() => {
     if (!consented) return
     safeSetItem(storageKey, JSON.stringify(prefs))
@@ -101,16 +104,22 @@ export function ConsentProvider({ children, storageKey = DEFAULT_CONSENT_KEY }: 
     setState({ prefs: defaultPreferences, consented: true })
   }, [])
 
+  // Unlike AuthProvider/SuiteThemeProvider (both already memoized), this value was a fresh object
+  // literal every render, forcing every consumer to re-render on any parent re-render regardless
+  // of whether consent actually changed.
+  const value = useMemo<ConsentContextType>(
+    () => ({
+      preferences: prefs,
+      hasConsented: consented,
+      updatePreferences,
+      acceptAll,
+      rejectAll,
+    }),
+    [prefs, consented, updatePreferences, acceptAll, rejectAll],
+  )
+
   return (
-    <ConsentContext.Provider
-      value={{
-        preferences: prefs,
-        hasConsented: consented,
-        updatePreferences,
-        acceptAll,
-        rejectAll,
-      }}
-    >
+    <ConsentContext.Provider value={value}>
       {children}
     </ConsentContext.Provider>
   )

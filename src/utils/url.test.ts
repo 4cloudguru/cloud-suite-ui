@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { isSafeUrl } from './url'
+import { describe, expect, it, vi } from 'vitest'
+import { isSafeRoutePath, isSafeUrl, resolveRoutePath } from './url'
 
 describe('isSafeUrl', () => {
   it.each([
@@ -46,3 +46,48 @@ describe('isSafeUrl', () => {
     expect(isSafeUrl(true as unknown as string)).toBe(false)
   })
 })
+
+describe('isSafeRoutePath', () => {
+  it.each(['/', '/dashboard', '/modules/123', '/a/b?x=1#y'])('accepts %s', (value) => {
+    expect(isSafeRoutePath(value)).toBe(true)
+  })
+
+  it.each([
+    // Never a valid in-app route target, even though isSafeUrl accepts these for href/src sinks.
+    'https://example.com',
+    'mailto:a@b.com',
+    '#anchor',
+    './relative',
+    'relative',
+    // Protocol-relative / backslash tricks, same class isSafeUrl rejects.
+    '//evil.com',
+    '/\\evil.com',
+    '\\\\evil.com',
+    '/\t/evil.com',
+    '',
+    '   ',
+    null,
+    undefined,
+  ])('rejects %s', (value) => {
+    expect(isSafeRoutePath(value as string | null | undefined)).toBe(false)
+  })
+
+  it('does not throw and returns false for truthy non-string inputs', () => {
+    expect(isSafeRoutePath(123 as unknown as string)).toBe(false)
+    expect(isSafeRoutePath({} as unknown as string)).toBe(false)
+  })
+})
+
+describe('resolveRoutePath', () => {
+  it('returns the value unchanged when safe', () => {
+    expect(resolveRoutePath('/dashboard', '/', 'Test')).toBe('/dashboard')
+  })
+
+  it('falls back and warns when the value is unsafe', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    expect(resolveRoutePath('//evil.com', '/', 'Test')).toBe('/')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unsafe route path'))
+    warn.mockRestore()
+  })
+})
+

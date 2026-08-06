@@ -39,7 +39,11 @@ export interface SuiteLink {
   /**
    * Stable window name of the target app. When set, the switcher reuses a single
    * tab per sibling (window.open(href, appId)) instead of spawning a new tab each
-   * time. Omit for plain new-tab navigation.
+   * time. Omit for plain new-tab navigation. Must not be one of the browser's
+   * reserved target keywords (`_self`, `_top`, `_parent`, `_blank`, case-insensitive)
+   * — one of those would turn "open a sibling tab" into an in-place navigation of the
+   * current tab; the switcher rejects these at runtime (console.warn + falls back to
+   * a plain new tab) rather than trusting the caller.
    */
   appId?: string
 }

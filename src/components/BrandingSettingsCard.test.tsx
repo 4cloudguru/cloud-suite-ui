@@ -204,4 +204,29 @@ describe('BrandingSettingsCard', () => {
     )
     expect(screen.getByLabelText('Product name')).toHaveValue('Half-typed')
   })
+
+  // Regression guard (data loss bug): a concurrent server-side change (another admin's edit, or
+  // a background refetch) must not silently clobber an in-progress, unsaved local edit.
+  it('does not clobber an in-progress edit when the value prop changes concurrently (data loss guard)', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderCard()
+
+    const name = screen.getByLabelText('Product name')
+    await user.clear(name)
+    await user.type(name, 'Half-typed')
+
+    // Simulate a concurrent server-side change to a DIFFERENT field arriving mid-edit.
+    rerender(
+      <BrandingSettingsCard
+        value={{ ...baseValue, primary_color: '#123456' }}
+        validators={validators}
+        onSave={() => Promise.resolve()}
+      />,
+    )
+
+    // The admin's unsaved edit must survive...
+    expect(screen.getByLabelText('Product name')).toHaveValue('Half-typed')
+    // ...and the view must not silently jump out from under them either.
+    expect(screen.getByLabelText('Primary color')).toHaveValue('#0a6e31')
+  })
 })

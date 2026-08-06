@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { DashboardCard } from './DashboardCard'
@@ -27,5 +27,16 @@ describe('DashboardCard', () => {
       </MemoryRouter>,
     )
     expect(screen.getByRole('link')).toHaveAttribute('href', '/modules')
+  })
+
+  it('falls back to "/" and warns when `to` is an unsafe route path', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    render(
+      <MemoryRouter>
+        <DashboardCard label="Modules" value={42} to="//evil.example.com" />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unsafe route path'))
   })
 })

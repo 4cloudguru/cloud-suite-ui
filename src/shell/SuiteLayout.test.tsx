@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { lazy, type ReactNode } from 'react'
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -11,7 +12,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import StorageIcon from '@mui/icons-material/Storage'
 import { SuiteLayout, type SuiteLayoutProps } from './SuiteLayout'
 import { SuiteThemeProvider } from '../theme'
-import { AuthProvider, type AuthApi } from '../identity'
+import { AuthProvider, useAuth, type AuthApi } from '../identity'
 import type { NavGroup } from './types'
 
 const api: AuthApi = {
@@ -38,6 +39,13 @@ function makeApi(scopes: string[] = ['admin']): AuthApi {
       allowed_scopes: scopes,
     }),
   }
+}
+
+// Drives a session-termination path other than the interactive sign-out click (see the
+// 'clears persisted nav-group state when the session ends without the sign-out click' test).
+function RefreshTrigger() {
+  const { refreshSession } = useAuth()
+  return <button onClick={() => void refreshSession()}>trigger-refresh</button>
 }
 
 function renderLayout(
@@ -69,6 +77,13 @@ const adminGroup: NavGroup = {
 
 beforeEach(() => {
   localStorage.clear()
+})
+
+// Several tests below spy on console.warn with a plain (non-restoring) vi.spyOn; without this,
+// an earlier test's recorded calls leak into a later test's `.not.toHaveBeenCalledWith(...)`
+// assertion, since console.warn is a shared global that stays mocked until restored.
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 describe('SuiteLayout', () => {
@@ -208,5 +223,99 @@ describe('SuiteLayout', () => {
     renderLayout({}, { child: <Lazy /> })
     expect(screen.getByRole('progressbar')).toBeInTheDocument()
     expect(await screen.findByText('lazy-loaded')).toBeInTheDocument()
+  })
+
+  it('falls back the Home nav link to "/" and warns when homeItem.path is unsafe', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    renderLayout({ homeItem: { ...homeItem, path: '//evil.example.com' } })
+    const link = await screen.findByRole('link', { name: 'Home' })
+    expect(link).toHaveAttribute('href', '/')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unsafe route path "//evil.example.com"'))
+  })
+
+  it('falls back the login link to "/" and warns when loginPath is unsafe', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const unauthApi: AuthApi = { ...api, getCurrentUser: vi.fn().mockRejectedValue(new Error('401')) }
+    renderLayout({ loginPath: '//evil.example.com' }, { authApi: unauthApi })
+    const link = await screen.findByRole('link', { name: 'Sign in' })
+    expect(link).toHaveAttribute('href', '/')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unsafe route path "//evil.example.com"'))
+  })
+
+  it.each([
+    ['an array', JSON.stringify(['not', 'an', 'object'])],
+    ['a primitive string', JSON.stringify('nope')],
+    ['a primitive number', JSON.stringify(42)],
+    ['an object with non-boolean values', JSON.stringify({ admin: 'yes', other: 1 })],
+  ])('ignores malformed persisted group state (%s) and falls back to default-open', async (_label, stored) => {
+    localStorage.setItem('test-malformed', stored)
+    renderLayout(
+      { navGroups: [adminGroup], groupStateStorageKey: 'test-malformed' },
+      { authApi: makeApi(['admin']) },
+    )
+    // Persistence is enabled with no VALID stored entry for 'admin', so it falls back to
+    // defaultGroupOpen('admin') = true (every group defaults open when persistence is on).
+    expect(await screen.findByRole('link', { name: 'Users' })).toBeInTheDocument()
+  })
+
+  it('warns when groupStateStorageKey matches the library\'s shared default key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    renderLayout({ groupStateStorageKey: 'suite-nav-groups' })
+    await screen.findByText('Test Suite')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('generic key "suite-nav-groups"'))
+  })
+
+  it('does not warn about the default key when groupStateStorageKey is app-specific', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    renderLayout({ groupStateStorageKey: 'my-app-nav-groups' })
+    await screen.findByText('Test Suite')
+    // Narrowed to the SuiteLayout-specific default key: renderLayout's SuiteThemeProvider wrapper
+    // has no storageKey of its own either, so it always emits its own (unrelated, expected)
+    // "generic key" warning about "suite-theme" — a bare 'generic key' match would also catch that.
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('generic key "suite-nav-groups"'))
+  })
+
+  it('clears persisted group state on sign-out', async () => {
+    localStorage.setItem('test-groups-signout', JSON.stringify({ admin: false }))
+    renderLayout(
+      { navGroups: [adminGroup], groupStateStorageKey: 'test-groups-signout' },
+      { authApi: makeApi(['admin']) },
+    )
+    await screen.findByText('Test Suite')
+    expect(localStorage.getItem('test-groups-signout')).not.toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }))
+    expect(localStorage.getItem('test-groups-signout')).toBeNull()
+  })
+
+  it('clears persisted nav-group state when the session ends without the sign-out click (e.g. a failed refresh)', async () => {
+    const failingRefreshApi: AuthApi = {
+      ...makeApi(['admin']),
+      refreshToken: vi.fn().mockRejectedValue(new Error('refresh failed')),
+    }
+    renderLayout(
+      { navGroups: [adminGroup], groupStateStorageKey: 'test-groups-refresh-fail' },
+      { authApi: failingRefreshApi, child: <RefreshTrigger /> },
+    )
+    await screen.findByRole('link', { name: 'Users' })
+    localStorage.setItem('test-groups-refresh-fail', JSON.stringify({ admin: false }))
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'trigger-refresh' }).click()
+    })
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Sign in' })).toBeInTheDocument())
+    expect(localStorage.getItem('test-groups-refresh-fail')).toBeNull()
+  })
+
+  it('does not clear persisted nav-group state on an initial unauthenticated mount', async () => {
+    localStorage.setItem('test-groups-initial-unauth', JSON.stringify({ admin: false }))
+    const unauthApi: AuthApi = { ...api, getCurrentUser: vi.fn().mockRejectedValue(new Error('401')) }
+    renderLayout(
+      { navGroups: [adminGroup], groupStateStorageKey: 'test-groups-initial-unauth' },
+      { authApi: unauthApi },
+    )
+    expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument()
+    expect(localStorage.getItem('test-groups-initial-unauth')).not.toBeNull()
   })
 })

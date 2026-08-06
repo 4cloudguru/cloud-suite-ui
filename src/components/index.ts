@@ -11,6 +11,7 @@ export type {
   NotificationChannelFormValues,
   NotificationChannelTypeOption,
   NotificationEventOption,
+  NotificationChannelValidators,
 } from './NotificationChannelsSection'
 export { ApiKeyExpirySettingsCard } from './ApiKeyExpirySettingsCard'
 export type { ApiKeyExpirySettingsCardProps, ApiKeyExpirySettingsValue, ApiKeyExpirySettingsInput } from './ApiKeyExpirySettingsCard'

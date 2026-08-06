@@ -1,4 +1,4 @@
-import { createTheme, decomposeColor, type Theme } from '@mui/material/styles'
+import { createTheme, decomposeColor, recomposeColor, type Theme } from '@mui/material/styles'
 import {
   BORDER_RADIUS,
   BRAND_PRIMARY,
@@ -10,20 +10,29 @@ import {
 } from '../tokens'
 import type { Direction, ThemeMode, ThemeOverrides } from './types'
 
+// A runtime whitelabel colour override is written verbatim into the ':root' custom
+// properties inside Emotion's own trusted <style> element (see styleOverrides below) —
+// a value containing CSS syntax characters could break out of the declaration into
+// arbitrary CSS/HTML, which a style-src CSP does not stop. Reject anything that could
+// break out of a CSS value BEFORE probing it at all.
+const UNSAFE_COLOR_CHARS = /[;{}<>\\]/i
+
 // createTheme -> augmentColor parses each palette colour with MUI's decomposeColor
 // and THROWS for anything it cannot parse (a CSS named colour, a hex missing its
-// '#', or a color() with an unsupported colour space like "color(display-p4 …)").
-// A runtime whitelabel override that would throw must fall back to the built-in
-// token rather than crash the consuming app's render tree, so this validator
-// probes the value with the SAME parser createTheme uses — a prefix regex is not
-// enough, because it accepts color() strings the parser then rejects.
-function isValidThemeColor(value: string | undefined): value is string {
-  if (!value) return false
+// '#', or a color() with an unsupported colour space like "color(display-p4 …)"). A
+// prefix regex is not enough, because it accepts color() strings the parser then
+// rejects — so, once past the character/url() check above, canonicalise through
+// decomposeColor + recomposeColor and use only that MUI-produced string. This also
+// means the palette/CSS never see the raw host value, only MUI's own canonical
+// re-serialisation of it, even when the input was otherwise well-formed.
+function normalizeThemeColor(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (UNSAFE_COLOR_CHARS.test(trimmed) || trimmed.includes('url(')) return undefined
   try {
-    decomposeColor(value.trim())
-    return true
+    return recomposeColor(decomposeColor(trimmed))
   } catch {
-    return false
+    return undefined
   }
 }
 
@@ -41,13 +50,10 @@ export function createAppTheme(
   direction: Direction = 'ltr',
   overrides: ThemeOverrides = {},
 ): Theme {
-  const primary = isValidThemeColor(overrides.primary) ? overrides.primary : BRAND_PRIMARY
+  const primary = normalizeThemeColor(overrides.primary) ?? BRAND_PRIMARY
   const secondaryOverride = mode === 'dark' ? overrides.secondaryDark : overrides.secondaryLight
-  const secondary = isValidThemeColor(secondaryOverride)
-    ? secondaryOverride
-    : mode === 'dark'
-      ? SECONDARY_DARK
-      : SECONDARY_LIGHT
+  const secondary =
+    normalizeThemeColor(secondaryOverride) ?? (mode === 'dark' ? SECONDARY_DARK : SECONDARY_LIGHT)
 
   const themeOptions = {
     direction,

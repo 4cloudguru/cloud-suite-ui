@@ -26,6 +26,13 @@ function isSameOrigin(href: string): boolean {
   }
 }
 
+// _self/_top/_parent are reserved HTML target keywords: passing one as the window.open target
+// name would navigate the CURRENT tab in place rather than opening a sibling. _blank is also
+// rejected here even though it's otherwise a valid target, because it collides with the
+// no-appId fallback's own hardcoded use of "_blank" as a fresh-tab-every-time marker — treating
+// it as a reusable named target would silently defeat this component's own tab-tracking Map.
+const RESERVED_WINDOW_TARGETS = /^_(self|top|parent|blank)$/i
+
 /**
  * Opens a sibling suite app. `link.href` is first validated against an
  * http(s)/mailto/tel/relative allowlist (see {@link isSafeUrl}) — a shared component's
@@ -47,7 +54,10 @@ function isSameOrigin(href: string): boolean {
  *   browser-level flag that would otherwise defeat reuse.
  *
  * Links without an `appId` have no stable identity to reuse by, so they keep opening a
- * fresh `noopener,noreferrer` tab every time, same as before.
+ * fresh `noopener,noreferrer` tab every time, same as before. An `appId` matching one of
+ * the reserved HTML target keywords (`_self`/`_top`/`_parent`/`_blank`, case-insensitive)
+ * is rejected the same way — it falls back to the fresh-tab path rather than risk
+ * navigating the current tab in place.
  *
  * Note for anyone adding security response headers later: don't add
  * `Cross-Origin-Opener-Policy: same-origin` (or `same-origin-allow-popups`) to a suite
@@ -64,6 +74,23 @@ function openSuiteLink(link: SuiteLink, currentAppId: string | undefined, openWi
   if (!link.appId) {
     window.open(link.href, '_blank', 'noopener,noreferrer')
     return
+  }
+
+  if (RESERVED_WINDOW_TARGETS.test(link.appId)) {
+    // eslint-disable-next-line no-console -- surfaced for the integrating app to notice/fix
+    console.warn(`SuiteSwitcher: refusing to use reserved window target name "${link.appId}"; opening a plain new tab instead`)
+    window.open(link.href, '_blank', 'noopener,noreferrer')
+    return
+  }
+
+  if (currentAppId && link.appId === currentAppId) {
+    // Non-blocking: this is almost always a caller misconfiguration (a link identifying
+    // itself as the current app), which could navigate the current tab in place instead of
+    // opening a sibling — but not unsafe enough on its own to refuse to open the link.
+    // eslint-disable-next-line no-console -- surfaced for the integrating app to notice/fix
+    console.warn(
+      `SuiteSwitcher: link.appId "${link.appId}" matches currentAppId; opening it could navigate the current tab in place instead of a sibling tab`,
+    )
   }
 
   const existing = openWindows.get(link.appId)

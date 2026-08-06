@@ -33,6 +33,8 @@ import AddIcon from '@mui/icons-material/Add'
 import SendIcon from '@mui/icons-material/Send'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
+import { isSafeUrl } from '../utils/url'
+import { useSeedFromKey } from '../utils/useSeedFromKey'
 
 /** A notification channel as rendered by the table (a trimmed server model). */
 export interface NotificationChannelListItem {
@@ -66,6 +68,20 @@ export interface NotificationEventOption {
   label: string
 }
 
+/**
+ * Optional host-supplied validators for channel fields, mirroring BrandingSettingsCardProps's
+ * `validators` shape (there, required; here, optional — target isn't the whole point of this
+ * component the way colour/URL validation is BrandingSettingsCard's).
+ */
+export interface NotificationChannelValidators {
+  /**
+   * Return false to reject `value` (a webhook URL or, for an email-type channel, a
+   * comma-separated recipient list) for the given channel `type`. Applied in ADDITION to — not
+   * instead of — the component's own `isSafeUrl` check on non-email targets.
+   */
+  isValidTarget?: (value: string, type: string) => boolean
+}
+
 export interface NotificationChannelsSectionProps {
   channels: NotificationChannelListItem[]
   isLoading?: boolean
@@ -74,6 +90,8 @@ export interface NotificationChannelsSectionProps {
   canManage?: boolean
   channelTypes: NotificationChannelTypeOption[]
   eventOptions: NotificationEventOption[]
+  /** Optional additional validation for the create/edit form's target field. */
+  validators?: NotificationChannelValidators
   onCreate: (input: NotificationChannelFormValues) => Promise<void>
   onUpdate: (id: string, input: NotificationChannelFormValues) => Promise<void>
   onDelete: (id: string) => Promise<void>
@@ -99,6 +117,7 @@ export function NotificationChannelsSection({
   canManage = true,
   channelTypes,
   eventOptions,
+  validators,
   onCreate,
   onUpdate,
   onDelete,
@@ -296,6 +315,7 @@ export function NotificationChannelsSection({
         channel={editing}
         channelTypes={channelTypes}
         eventOptions={eventOptions}
+        validators={validators}
         onClose={() => setFormOpen(false)}
         onSubmit={async (input) => {
           if (editing) {
@@ -333,6 +353,7 @@ function ChannelFormDialog({
   channel,
   channelTypes,
   eventOptions,
+  validators,
   onClose,
   onSubmit,
 }: {
@@ -340,6 +361,7 @@ function ChannelFormDialog({
   channel: NotificationChannelListItem | null
   channelTypes: NotificationChannelTypeOption[]
   eventOptions: NotificationEventOption[]
+  validators?: NotificationChannelValidators
   onClose: () => void
   onSubmit: (input: NotificationChannelFormValues) => Promise<void>
 }) {
@@ -350,20 +372,26 @@ function ChannelFormDialog({
   const [events, setEvents] = useState<string[]>([])
   const [enabled, setEnabled] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [targetError, setTargetError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [seededFor, setSeededFor] = useState<string | null>(null)
-  const seedKey = channel?.id ?? 'new'
-  if (open && seededFor !== seedKey) {
-    setSeededFor(seedKey)
+  // Identity-keyed (channel?.id ?? 'new') and must always reseed on reopen \u2014 even for the same
+  // record \u2014 because `target` is intentionally never seeded from the channel's existing value
+  // (see the `setTarget('')` below and the "leave blank to keep" helper text), so seededFor is
+  // reset to null on close via resetSeedTracking, per useSeedFromKey's documented identity-keyed
+  // usage.
+  const seedKey = open ? (channel?.id ?? 'new') : null
+  const [shouldSeed, resetSeedTracking] = useSeedFromKey(seedKey)
+  if (shouldSeed) {
     setError(null)
+    setTargetError(null)
     setName(channel?.name ?? '')
     setType(channel?.type ?? channelTypes[0]?.value ?? '')
     setTarget('')
     setEvents(channel?.events ?? [])
     setEnabled(channel?.enabled ?? true)
   }
-  if (!open && seededFor !== null) setSeededFor(null)
+  if (!open) resetSeedTracking()
 
   const toggleEvent = (value: string) =>
     setEvents((prev) => (prev.includes(value) ? prev.filter((x) => x !== value) : [...prev, value]))
@@ -375,6 +403,22 @@ function ChannelFormDialog({
   const isEmail = Boolean(typeOption?.isEmail)
 
   const handleSave = async () => {
+    setTargetError(null)
+    // Blank target on edit means "keep the existing one" (see targetRequired below) and is never
+    // itself a value that could reach the SSRF-prone dispatch sink, so it's exempt from this check.
+    if (target) {
+      // Both, not either: an optional host allowlist AND (for a non-email target) the library's
+      // own isSafeUrl scheme check must pass before the raw value reaches onCreate/onUpdate.
+      const validTarget = (validators?.isValidTarget?.(target, type) ?? true) && (isEmail || isSafeUrl(target))
+      if (!validTarget) {
+        setTargetError(
+          isEmail
+            ? t('notificationChannels.targetInvalidEmail', { defaultValue: 'Enter a valid recipient address.' })
+            : t('notificationChannels.targetInvalidUrl', { defaultValue: 'Enter a valid, safe destination URL.' }),
+        )
+        return
+      }
+    }
     setSaving(true)
     setError(null)
     try {
@@ -427,18 +471,23 @@ function ChannelFormDialog({
                 : t('notificationChannels.target', { defaultValue: 'Target URL' })
             }
             value={target}
-            onChange={(e) => setTarget(e.target.value)}
+            onChange={(e) => {
+              setTarget(e.target.value)
+              setTargetError(null)
+            }}
             required={targetRequired}
             fullWidth
             size="small"
             type={isEmail ? 'text' : 'url'}
             placeholder={isEmail ? 'ops@example.com, oncall@example.com' : 'https://'}
+            error={Boolean(targetError)}
             helperText={
-              channel
+              targetError ??
+              (channel
                 ? t('notificationChannels.targetKeep', { defaultValue: 'Leave blank to keep the existing target.' })
                 : isEmail
                   ? t('notificationChannels.targetEmailHelp', { defaultValue: 'One or more comma-separated email addresses.' })
-                  : t('notificationChannels.targetHelp', { defaultValue: 'The destination webhook URL.' })
+                  : t('notificationChannels.targetHelp', { defaultValue: 'The destination webhook URL.' }))
             }
           />
           <Box>
