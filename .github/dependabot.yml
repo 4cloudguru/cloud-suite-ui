@@ -11,6 +11,11 @@ updates:
       day: monday
       time: "09:00"
       timezone: UTC
+    # zizmor dependabot-cooldown: hold routine version-update PRs 7 days after release so an
+    # obviously-compromised or just-yanked release doesn't land immediately; security-alert PRs
+    # are exempt from cooldown by design and still land right away.
+    cooldown:
+      default-days: 7
     reviewers:
       - maintainers
     labels:
@@ -62,6 +67,9 @@ updates:
       day: monday
       time: "09:00"
       timezone: UTC
+    # zizmor dependabot-cooldown: same 7-day cooldown rationale as the npm ecosystem above.
+    cooldown:
+      default-days: 7
     reviewers:
       - maintainers
     labels:
