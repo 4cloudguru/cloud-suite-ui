@@ -8,4 +8,5 @@ export type {
   RoleTemplateInfo,
   AuthContextType,
   AuthApi,
+  RefreshSessionResult,
 } from './types'

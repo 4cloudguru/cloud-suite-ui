@@ -14,16 +14,28 @@ export interface Membership {
 export interface MeResponse {
   user: User
   memberships: Membership[]
+  /**
+   * Flat, organization-less effective scope set. Must be the effective set for whatever
+   * organization is currently selected in the host app — if a host unions scopes across
+   * memberships instead, the {@link ADMIN_SCOPE} wildcard reveals admin affordances for every
+   * organization the user belongs to, not just the selected one. Hosts that let a user switch
+   * organization must refresh/re-mount the provider (a fresh `getCurrentUser()`) on switch
+   * rather than reusing a stale `allowed_scopes`. For an org-scoped check, prefer
+   * {@link AuthContextType.hasScope}'s optional `organizationId` argument, which resolves
+   * against the matching {@link Membership.role_template_scopes} instead of this field.
+   */
   allowed_scopes: string[]
   session_expires_at?: string
 }
 
 /**
  * Primary role template summary, informational/display-only (e.g. "show the user's role name
- * in a profile menu"). It is derived from the FIRST membership that carries a role template,
- * so its `scopes` field is NOT necessarily the user's full effective scope set and must never
- * be used for gating. Use {@link AuthContextType.hasScope} / `allowedScopes` for that — they
- * are the sole authorization-adjacent surface this library exposes.
+ * in a profile menu"). Selected deterministically from the candidate memberships that carry a
+ * role template by sorting on `organization_id` and taking the first — NOT by array position,
+ * since the server's membership ordering is not a meaningful tie-break. Its `scopes` field is
+ * NOT necessarily the user's full effective scope set and must never be used for gating. Use
+ * {@link AuthContextType.hasScope} / `allowedScopes` for that — they are the sole
+ * authorization-adjacent surface this library exposes.
  */
 export interface RoleTemplateInfo {
   id?: string
@@ -50,21 +62,39 @@ export interface AuthContextType {
    * retry banner instead of redirecting to login) — `isAuthenticated` is always false in both
    * cases, since the library fails closed regardless. The raw error object is deliberately NOT
    * exposed: it can carry response bodies, headers, and URLs that must not leak into UI state.
+   * A passed-through `Error.message` is truncated and stripped of URL/path-like substrings
+   * (see `sanitizeAuthError`), but is otherwise host-controlled. Cleared by `resetSessionState`
+   * (so both `logout()` and every fail-closed transition start clean, though the fail-closed
+   * paths immediately set their own message afterward).
    */
   authError: string | null
   login: (provider?: string) => void
   devLogin: () => Promise<void>
   ldapLogin: (username: string, password: string) => Promise<void>
   logout: () => void
-  /** Rotate the session before it lapses; logs out on failure. */
-  refreshSession: () => Promise<void>
+  /**
+   * Rotate the session before it lapses; logs out on failure. Resolves to `'refreshed'` once
+   * the host's `refreshToken()` succeeds (the session is then re-resolved via a background
+   * `getCurrentUser()` so scopes/role cannot go stale), `'skipped'` when coalesced with an
+   * already-in-flight refresh (or discarded by a logout/unmount race) — callers should treat
+   * this as "nothing happened, try again" rather than success — or `'failed'` when
+   * `refreshToken()` itself rejected.
+   */
+  refreshSession: () => Promise<RefreshSessionResult>
   /**
    * UI-visibility gate ONLY — NOT an authorization boundary. Every consuming app's backend
    * must independently enforce authorization on every request; this check exists purely to
-   * hide/show nav items and UI affordances the user is not expected to use.
+   * hide/show nav items and UI affordances the user is not expected to use. With no
+   * `organizationId`, resolves against the flat `allowedScopes` (see its caveats on
+   * {@link MeResponse.allowed_scopes}). With `organizationId`, resolves against the matching
+   * {@link Membership.role_template_scopes} instead (still honouring the {@link ADMIN_SCOPE}
+   * wildcard within that membership), and returns `false` when no membership matches.
    */
-  hasScope: (scope: string) => boolean
+  hasScope: (scope: string, organizationId?: string) => boolean
 }
+
+/** Outcome of a {@link AuthContextType.refreshSession} call. */
+export type RefreshSessionResult = 'refreshed' | 'skipped' | 'failed'
 
 /**
  * The backend contract the AuthProvider drives. Each app supplies its own
@@ -73,13 +103,23 @@ export interface AuthContextType {
  */
 export interface AuthApi {
   getCurrentUser: () => Promise<MeResponse>
-  /** Redirect the browser to begin an SSO login for the given provider. */
+  /**
+   * Redirect the browser to begin an SSO login for the given provider. `provider` is validated
+   * by the caller against `/^[A-Za-z0-9_-]+$/` before it reaches this method (falls back to the
+   * default otherwise), so implementations can rely on it being a plain identifier.
+   */
   login: (provider: string) => void
   /** Establish a dev session (sets the session cookie/token), then resolve via /me. */
   devLogin: () => Promise<unknown>
   /** Establish an LDAP session, then resolve via /me. */
   ldapLogin: (username: string, password: string) => Promise<unknown>
   logout: () => void
-  /** Rotate the session; returns the new TTL in seconds. */
+  /**
+   * Rotate the session; returns the new TTL in seconds. This library awaits the returned
+   * promise with no timeout or `AbortController` of its own — a host implementation that can
+   * hang indefinitely must enforce its own timeout, or every later `refreshSession()` call
+   * coalesces into the same stuck call (surfaced to callers as `'skipped'`, never resolving to
+   * `'refreshed'`/`'failed'` until the host's promise finally settles).
+   */
   refreshToken: () => Promise<{ expires_in: number }>
 }
