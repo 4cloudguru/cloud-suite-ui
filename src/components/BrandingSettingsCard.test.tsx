@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18n from 'i18next'
 import { BrandingSettingsCard, type BrandingValidators } from './BrandingSettingsCard'
 import type { UIThemeConfig } from '../theme'
 
@@ -130,6 +131,25 @@ describe('BrandingSettingsCard', () => {
       strings: { fields: { primary_color: { label: 'Primary color', errorText: 'Bad colour' } } },
     })
     expect(screen.queryByText('Used for buttons, links, and accents.')).not.toBeInTheDocument()
+  })
+
+  it('resolves an unclaimed field label/helperText through the t(key, {defaultValue}) i18n contract, not a hardcoded string', () => {
+    // No `strings.fields.primary_color` entry is supplied, so this asserts the field falls
+    // through to i18next (and picks up a real translation) rather than the hardcoded English.
+    i18n.addResourceBundle(
+      'en',
+      'translation',
+      { branding: { fields: { primary_color: { label: 'Farbe Primär', helperText: 'Testhinweis' } } } },
+      true,
+      true,
+    )
+    try {
+      renderCard()
+      expect(screen.getByLabelText('Farbe Primär')).toBeInTheDocument()
+      expect(screen.getByText('Testhinweis')).toBeInTheDocument()
+    } finally {
+      i18n.removeResourceBundle('en', 'translation')
+    }
   })
 
   it('reset saves an empty config', async () => {
