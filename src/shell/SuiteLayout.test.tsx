@@ -128,6 +128,48 @@ describe('SuiteLayout', () => {
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
+  it('opens the separate language menu and switches the language', async () => {
+    renderLayout({
+      languages: [
+        { code: 'en', label: 'English' },
+        { code: 'es', label: 'Español' },
+      ],
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Language' }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'English' })).toBeInTheDocument()
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Español' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+  })
+
+  // happy-dom implements a real matchMedia (matches derived from the viewport), which defaults
+  // wide enough that isDesktop is true in every other test here — this is the one test that
+  // exercises the mobile (temporary Drawer) layout, so it forces the narrow case explicitly.
+  it('opens the mobile nav via the toggle button and closes it when a nav item is clicked', async () => {
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: false,
+      media: '',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as unknown as MediaQueryList)
+
+    renderLayout({ navGroups: [adminGroup] }, { authApi: makeApi(['admin']) })
+    // The temporary Drawer starts closed (aria-hidden), so the nav link isn't in the
+    // accessibility tree yet — confirms the closed state before opening it.
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle navigation' }))
+    const dashboardLink = await screen.findByRole('link', { name: 'Dashboard' })
+
+    fireEvent.click(dashboardLink)
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument())
+  })
+
   it('combines theme and language into a single Settings menu when settingsMenu is set', async () => {
     renderLayout({
       settingsMenu: true,
