@@ -21,7 +21,9 @@ export type BrandingFieldKey = keyof UIThemeConfig
  * Host-supplied copy for a single field. Supplying an entry means the host owns
  * that field's copy outright — an omitted `helperText` renders no helper rather
  * than falling back to this package's English, so a translated app never leaks
- * untranslated text. Fields with no entry at all use the English defaults.
+ * untranslated text. Fields with no entry at all resolve through
+ * `t('branding.fields.<key>.label' | '.helperText', { defaultValue })`, so they
+ * are translatable by default rather than hardcoded English.
  */
 export interface BrandingFieldLabel {
   label: string
@@ -178,13 +180,13 @@ export function BrandingSettingsCard({
                     : t('branding.invalidText', { defaultValue: 'Must be 100 characters or fewer.' })))
               : copy
                 ? copy.helperText
-                : f.helperText
+                : t(`branding.fields.${f.key}.helperText`, { defaultValue: f.helperText })
             return (
               <TextField
                 key={f.key}
                 size="small"
                 fullWidth
-                label={copy?.label ?? f.label}
+                label={copy?.label ?? t(`branding.fields.${f.key}.label`, { defaultValue: f.label })}
                 value={fieldValue}
                 error={invalid}
                 helperText={helper}

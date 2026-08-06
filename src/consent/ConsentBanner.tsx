@@ -58,12 +58,14 @@ export function ConsentBanner({ privacyPolicyHref = '/privacy' }: ConsentBannerP
           gutterBottom
           sx={{ color: 'text.secondary' }}
         >
-          We use cookies and similar technologies. Essential cookies are always active. You may
-          choose to enable additional categories below. See our{' '}
+          {t('consentBanner.description', {
+            defaultValue:
+              'We use cookies and similar technologies. Essential cookies are always active. You may choose to enable additional categories below. See our',
+          })}{' '}
           <a href={safePrivacyPolicyHref} style={{ color: 'inherit' }}>
-            Privacy Policy
+            {t('consentBanner.privacyPolicyLinkText', { defaultValue: 'Privacy Policy' })}
           </a>{' '}
-          for details.
+          {t('consentBanner.descriptionSuffix', { defaultValue: 'for details.' })}
         </Typography>
 
         {showDetails && (

@@ -14,7 +14,7 @@ visual and behavioural parity from a single source of truth.
 | **Theme**      | `createAppTheme(mode, prefersReducedMotion, direction, overrides)`, `SuiteThemeProvider`, `useThemeMode`                     |
 | **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, types |
 | **Consent**    | `ConsentProvider`, `useConsent`, `ConsentBanner`                                                                             |
-| **Components** | `PageHeader`, `DashboardCard`, `Page`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`                             |
+| **Components** | `PageHeader`, `DashboardCard`, `Page`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`, `BrandingSettingsCard` (requires a host-supplied `validators` prop) |
 | **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, nav types                                           |
 | **Utils**      | `isSafeUrl` (host-supplied URL guard for navigation / image sinks)                                                           |
 
@@ -23,7 +23,7 @@ Framework packages (React, MUI, Emotion, i18next, react-router) are
 
 ## Develop
 
-Requires Node `>=24.0.0 <25` (see `engines` in `package.json`).
+Requires Node `>=22.0.0 <25` (see `engines` in `package.json`).
 
 ```bash
 npm install
@@ -58,7 +58,7 @@ using the repo's `GITHUB_TOKEN`.
   gh attestation verify --repo sethbacon/terraform-suite-ui ./sethbacon-terraform-suite-ui-*.tgz
   ```
 
-- CI runs `npm audit --audit-level=high` on every push/PR, and CodeQL (`javascript-typescript`)
+- CI runs `npm audit --audit-level=moderate` on every push/PR, and CodeQL (`javascript-typescript`)
   runs on every push/PR plus a weekly schedule (see [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml)).
 - A [`commitlint`](https://commitlint.js.org/) check on every PR enforces Conventional Commits,
   since [release-please](.github/workflows/release-please.yml) derives version bumps solely from
@@ -90,7 +90,27 @@ import { SuiteThemeProvider, PageHeader, useAuth } from '@sethbacon/terraform-su
 
 > This package is **ESM-only** (`"type": "module"`, a single `import` export condition, no
 > `require`) — consume it from an ESM build/toolchain. It also declares `engines.node`
-> (`>=24.0.0 <25`); installing under an older/newer Node major is unsupported.
+> (`>=22.0.0 <25`); installing under an older/newer Node major is unsupported.
+
+## Internationalization (i18n)
+
+Every component resolves user-facing copy through `useTranslation()`'s `t(key, { defaultValue })`,
+so a host app's i18next configuration owns translation and an incomplete bundle still renders
+readable English.
+
+`BrandingSettingsCard` layers a **host-supplied `strings` prop** on top of that same contract, for
+apps that already have translated copy for their own field labels/help text and would rather pass
+it straight through than duplicate it into an i18next bundle. Precedence per field is
+`strings.fields[key]?.label ?? t('branding.fields.<key>.label', { defaultValue: '<English label>' })`
+(and the same for `helperText`) — an app that supplies no `strings` entry for a field still gets a
+translatable label/helper text via `t()`; supplying an entry with e.g. `errorText` but no
+`helperText` intentionally renders no helper at all (the host is presumed to own that field's copy
+outright), rather than falling back to the `t()`-resolved English.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the prop-contract stability convention that applies to
+`BrandingSettingsCard`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`, and
+`UIThemeConfig` specifically — a separate concern from this section's translation contract, which
+applies uniformly to every component.
 
 ## Security model
 
@@ -108,13 +128,31 @@ import { SuiteThemeProvider, PageHeader, useAuth } from '@sethbacon/terraform-su
   The special `ADMIN_SCOPE` (`'admin'`) wildcard mirrors the backend's own admin-wildcard
   convention — do not rely on it as a security control in this library.
 - **`refreshSession()` logs out on failure** (a failed token refresh clears the session rather
-  than leaving a stale/ambiguous state); `authError` on the auth context exposes the raw error
-  from the most recent failed session-resolution call if your app wants to distinguish a network
-  blip from a real "not logged in" state.
-- Pass an app-specific `storageKey` to `ConsentProvider`/`SuiteThemeProvider` if your app shares an
-  origin with a sibling suite app — the default keys are generic and will collide otherwise (the
-  providers log a one-time console warning if you don't).
+  than leaving a stale/ambiguous state); `authError` on the auth context is a sanitized,
+  display-safe string describing the most recent failed session-resolution call — never the raw
+  error object, response body, headers, or URLs — if your app wants to distinguish a network blip
+  from a real "not logged in" state.
+- Pass an app-specific `storageKey` to `ConsentProvider`/`SuiteThemeProvider`, and an app-specific
+  `groupStateStorageKey` to `SuiteLayout`, if your app shares an origin with a sibling suite app —
+  the default keys are generic and will collide otherwise (all three log a one-time console
+  warning if you don't). `SuiteLayout` clears its own persisted nav-group state on every
+  transition to unauthenticated; consent preferences deliberately survive, since a consent
+  decision is origin-scoped rather than session-scoped.
 - **`isSafeUrl` is the URL guard the shared components apply to host-supplied URLs** before using
   them for navigation (`SuiteSwitcher`) or image sinks (`SuiteLayout`/`SuiteThemeProvider`
   branding). It is exported so your app can apply the same allowlist (http/https/mailto/tel and
-  relative paths only) to any backend- or user-influenced URL at its own boundary.
+  relative paths only) to any backend- or user-influenced URL at its own boundary. Compose rather
+  than re-derive it — an app that needs a narrower rule should call `isSafeUrl` first and layer its
+  own check on top, so a future fix to the shared parsing logic reaches every consumer:
+
+  ```ts
+  export function isSafeExternalUrl(value: string | null | undefined): value is string {
+    if (!isSafeUrl(value)) return false // shared base allowlist + normalisation
+    if (/^[/#.]/.test(value.trim())) return true // relative — already screened above
+    return new URL(value.trim()).protocol === 'https:' // app-specific narrowing
+  }
+  ```
+
+- Route props (`SuiteLayout`'s `NavItem.path` and `loginPath`, `DashboardCard`'s `to`) must be
+  in-app paths beginning with `/`. Anything absolute or protocol-relative is rejected with a
+  console warning and falls back to `/`.
