@@ -33,6 +33,11 @@ jobs:
     outputs:
       tarball: ${{ steps.pack.outputs.tarball }}
     steps:
+      # audit, not block: this job runs npm ci/build/test — the full untrusted dependency
+      # lifecycle — so its egress footprint isn't known/stable enough to allowlist safely. It
+      # holds no publish/attestation secrets (see job comment above), so audit-only here is an
+      # acceptable tradeoff; the privileged `publish` job below (no dependency install) uses
+      # egress-policy: block with an explicit endpoint allowlist instead.
       - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           egress-policy: audit
@@ -40,12 +45,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Full history (0 = all branches/tags), not the default shallow depth-1 clone, so the
+          # ancestry check below can walk back from the tagged commit to origin/main.
+          fetch-depth: 0
 
+      # package-manager-cache disabled: release-triggered job — zizmor flags setup-node v7's
+      # auto-enabled cache here as a cache-poisoning risk even though npm ci runs below.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: "@sethbacon"
+          package-manager-cache: false
 
       - name: Verify tag matches package.json version
         run: |
@@ -55,6 +66,18 @@ jobs:
             exit 1
           fi
           echo "Publishing ${PKG_VERSION} from ${GITHUB_REF} — OK"
+
+      # In-repo half of the release-integrity control: the actual human-review gate is a
+      # required-reviewer rule on the "release" GitHub Environment, configured in repo Settings
+      # (not git — see FIX_REPORT notes for the read/write gh api commands). This step only
+      # guarantees the tagged commit is not one that bypassed main entirely.
+      - name: Verify release tag is reachable from main
+        run: |
+          git fetch --no-tags --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::The checked-out commit is not reachable from main. Refusing to publish a release cut from an unmerged/unreachable ref."
+            exit 1
+          fi
 
       # --ignore-scripts: this package's build (tsup/esbuild) and tests need no dependency install
       # scripts, so disabling them shrinks the untrusted-code surface even in this unprivileged job.
@@ -71,35 +94,65 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm audit signatures
 
-      - name: Verify the publish tarball only contains dist + docs
+      - name: Verify the publish tarball contains exactly dist + docs (no more, no fewer)
         run: |
           npm pack --dry-run --json > /tmp/pack.json
-          UNEXPECTED=$(node -e "
+          node -e "
+            const { readdirSync } = require('node:fs');
             const pkg = require('/tmp/pack.json')[0];
-            const bad = pkg.files
-              .map(f => f.path)
-              .filter(p => !p.startsWith('dist/') && !['package.json', 'README.md', 'LICENSE', 'NOTICE'].includes(p));
-            console.log(bad.join('\n'));
-          ")
-          if [ -n "$UNEXPECTED" ]; then
-            echo "::error::Unexpected file(s) would be published: $UNEXPECTED"
-            exit 1
-          fi
+            const actual = pkg.files.map((f) => f.path).sort();
+            const distFiles = readdirSync('dist', { recursive: true }).map((f) => 'dist/' + f);
+            const expected = ['LICENSE', 'NOTICE', 'README.md', 'package.json', ...distFiles].sort();
+            const missing = expected.filter((p) => !actual.includes(p));
+            const unexpected = actual.filter((p) => !expected.includes(p));
+            if (missing.length) console.error('::error::Missing expected file(s) from the publish tarball: ' + missing.join(', '));
+            if (unexpected.length) console.error('::error::Unexpected file(s) would be published: ' + unexpected.join(', '));
+            if (missing.length || unexpected.length) process.exit(1);
+          "
 
       # Pack the exact tarball once so the published bytes and the attestations below all bind to
-      # the same digest.
+      # the same digest. Validate the filename's shape before it becomes a cross-job output — it
+      # is consumed by the privileged publish job below, so a malformed value must fail here.
       - name: Pack tarball
         id: pack
-        run: echo "tarball=$(npm pack --silent)" >> "$GITHUB_OUTPUT"
+        run: |
+          TARBALL=$(npm pack --silent | tail -n1)
+          if ! [[ "$TARBALL" =~ ^sethbacon-terraform-suite-ui-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tgz$ ]]; then
+            echo "::error::npm pack produced an unexpected filename, refusing to publish it: $TARBALL"
+            exit 1
+          fi
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
 
       # Content check, not just paths: the bytes inside the tarball must be exactly the dist/ this
       # job built two steps ago — a pack-time mutation (e.g. a lifecycle script slipped into a
       # dependency) cannot swap file contents undetected.
+      #
+      # TARBALL flows in via env:, not template-expanded into the script body (zizmor
+      # template-injection) — same pattern as the "npm publish" step in the publish job below.
       - name: Verify tarball contents match the built dist byte-for-byte
         run: |
           mkdir -p /tmp/tarball-verify
-          tar -xzf "${{ steps.pack.outputs.tarball }}" -C /tmp/tarball-verify
+          tar -xzf "$TARBALL" -C /tmp/tarball-verify
           diff -r /tmp/tarball-verify/package/dist dist
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
+      # Mechanical check for the "no embedded source" invariant scripts/strip-sourcemap-sources.mjs
+      # is supposed to produce — parses every packed .map rather than trusting the build chain ran.
+      - name: Verify no packed sourcemap embeds sourcesContent
+        run: |
+          node -e "
+            const { readdirSync, readFileSync } = require('node:fs');
+            const { join } = require('node:path');
+            const dir = '/tmp/tarball-verify/package/dist';
+            const offenders = readdirSync(dir, { recursive: true })
+              .filter((f) => f.endsWith('.map'))
+              .filter((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')).sourcesContent);
+            if (offenders.length) {
+              console.error('::error::Packed sourcemap(s) still embed sourcesContent: ' + offenders.join(', '));
+              process.exit(1);
+            }
+          "
 
       # CycloneDX BOM of the full dependency graph. Generated here (unprivileged) and attested in
       # the publish job. Release-asset upload is disabled so this job needs no contents: write.
@@ -136,25 +189,48 @@ jobs:
       id-token: write # for actions/attest-*
       attestations: write
     steps:
+      # block, not audit: this job runs no dependency-install/build code (only downloads a
+      # pre-built artifact and publishes/attests it), so its egress needs are fixed and known —
+      # allowlist them instead of just auditing, since this job holds the registry/OIDC/
+      # attestation credentials a compromised dependency would want to exfiltrate.
       - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
-          egress-policy: audit
+          egress-policy: block
+          allowed-endpoints: >
+            *.actions.githubusercontent.com:443
+            api.github.com:443
+            fulcio.sigstore.dev:443
+            github.com:443
+            npm.pkg.github.com:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
 
+      # package-manager-cache disabled: this job never installs deps (only publishes the
+      # pre-built artifact below), so the cache would be both useless and a cache-poisoning
+      # risk (zizmor) in this release-triggered, privileged job.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: "@sethbacon"
+          package-manager-cache: false
 
       - name: Download publish artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: publish-artifacts
 
-      - run: npm publish "${{ needs.build.outputs.tarball }}"
+      # TARBALL flows in via env:, not template-expanded into the script body — the Pack tarball
+      # step above already validated its shape, but this way it is never treated as anything but a
+      # plain argument to npm publish.
+      - run: npm publish "$TARBALL"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARBALL: ${{ needs.build.outputs.tarball }}
 
+      # Attest the exact tarball just published (not dist/** on disk): subject-path is the same
+      # downloaded artifact npm publish above just used, so provenance binds to the bytes
+      # consumers actually install rather than a rebuilt/re-derived copy.
       - name: Generate build provenance attestation
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:

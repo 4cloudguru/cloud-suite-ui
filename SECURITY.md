@@ -29,3 +29,34 @@ few business days. Because `@sethbacon/terraform-suite-ui` is consumed by both s
 (`terraform-registry-frontend`, `terraform-state-manager-frontend`), a confirmed vulnerability
 here may affect both apps — please give us a reasonable window to release a fix before any public
 disclosure.
+
+## Release Automation Trust Anchor
+
+Releases are cut by a GitHub App (via `actions/create-github-app-token` in
+[release-please.yml](.github/workflows/release-please.yml)), not a personal access token. The App
+should be installed **only on this repository** (not org-wide) and granted the minimum
+permissions release-please needs (`contents: write`, `pull-requests: write`); it should not hold
+`packages: write` or any other scope — publishing to the registry is a separate step, gated behind
+the `release` environment, in [publish.yml](.github/workflows/publish.yml). If you are auditing
+this repository's supply chain, verify the App's installation scope from the organization's
+GitHub App settings, since it is not something this repository's own files can assert about
+themselves.
+
+## Dependency Override: `esbuild` Pinned Under `tsup`
+
+`package.json`'s `overrides` block forces the `esbuild` copy nested under `tsup` to `^0.28.1`.
+Commit `cb79b95` ("pin esbuild to patched 0.28.1") added this to patch
+[GHSA-g7r4-m6w7-qqqr](https://github.com/advisories/GHSA-g7r4-m6w7-qqqr) ("esbuild allows
+arbitrary file read when running the development server on Windows", low severity, CWE-22),
+which affects `esbuild` `>=0.27.3 <0.28.1`. It is still needed: `tsup@8.5.1` alone resolves its
+private `esbuild` dependency to `0.27.7` — inside the vulnerable range — and `npm audit` reports
+that one low-severity finding with the override removed; with it in place, `npm audit` is clean.
+The override is scoped under `tsup` rather than applied flatly so it only rewrites `tsup`'s own
+build-time dependency, not every `esbuild` in the graph.
+
+`tsup@8.5.1` itself still declares `"esbuild": "^0.27.0"`, so the override installs a version
+outside what `tsup` asked for. This is accepted: `esbuild` is a `tsup` build-time dependency only
+(it is never shipped to consumers of this package), the override is a patch-level security bump
+with no breaking change to the CLI/API surface `tsup` uses, and this repository's own `build`,
+`test`, and `typecheck` jobs exercise `tsup` against the overridden `0.28.1` on every run. Drop
+the override once `tsup` bumps its own declared range past `0.28.1`.

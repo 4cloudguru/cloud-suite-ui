@@ -20,6 +20,9 @@ jobs:
     name: Typecheck
     runs-on: ubuntu-latest
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -27,7 +30,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
 
   test:
@@ -38,6 +41,9 @@ jobs:
       matrix:
         deps: [latest, floor]
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -45,11 +51,45 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # Exercise the LOWEST advertised peer majors (what both consumer apps currently run) so the
       # supported floor is actually tested — the default install/devDeps pin the latest majors.
+      #
+      # overrides.react-router (package.json) pins react-router to 8.3.0 to patch
+      # GHSA-qwww-vcr4-c8h2 in react-router-dom's own react-router dependency. Left in place, it
+      # would ALSO force react-router-dom@^6's dependency to 8.3.0, silently defeating this leg's
+      # whole point — react-router-dom@^6 never actually depends on react-router 8.x in the real
+      # world. Delete it for this ephemeral, non-persisted (not committed/pushed) install only, so
+      # the floor leg exercises react-router-dom@^6's own genuine react-router dependency.
       - if: matrix.deps == 'floor'
-        run: npm install --no-save --legacy-peer-deps react-router-dom@^6 i18next@^24 react-i18next@^15
+        run: npm pkg delete overrides.react-router
+      - if: matrix.deps == 'floor'
+        run: npm install --no-save --legacy-peer-deps --ignore-scripts react-router-dom@^6 i18next@^24 react-i18next@^15 # zizmor: ignore[adhoc-packages] deliberate floor-deps install (rationale above); --no-save, ephemeral only
+      # Guard against the override (or the floor-leg deletion above) silently drifting: fail loudly
+      # if the installed react-router major doesn't match what each leg is supposed to exercise.
+      - name: Assert installed react-router matches this leg's expectation
+        run: |
+          RR_MAJOR=$(npm ls react-router --all --json 2>/dev/null | node -e "
+            const data = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+            const find = (deps) => {
+              if (!deps) return null;
+              if (deps['react-router']) return deps['react-router'].version;
+              for (const k of Object.keys(deps)) { const r = find(deps[k].dependencies); if (r) return r; }
+              return null;
+            };
+            const v = find(data.dependencies);
+            if (!v) { console.error('react-router not found in the tree'); process.exit(1); }
+            console.log(v.split('.')[0]);
+          ")
+          echo "react-router major installed: $RR_MAJOR"
+          if [ "${{ matrix.deps }}" = "floor" ] && [ "$RR_MAJOR" != "6" ]; then
+            echo "::error::floor leg expected react-router major 6 (react-router-dom@^6's own dependency) but got $RR_MAJOR — the overrides.react-router deletion above did not take effect."
+            exit 1
+          fi
+          if [ "${{ matrix.deps }}" = "latest" ] && [ "$RR_MAJOR" != "8" ]; then
+            echo "::error::latest leg expected react-router major 8 (the package.json overrides.react-router security pin) but got $RR_MAJOR."
+            exit 1
+          fi
       - run: npm run test:coverage
 
   # The package now advertises engines >=22 <25; this job runs the suite on the
@@ -60,6 +100,9 @@ jobs:
     name: Test (node floor)
     runs-on: ubuntu-latest
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -67,13 +110,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm test
 
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -81,13 +127,16 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm run build
 
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -95,7 +144,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npm audit --audit-level=moderate
       # Verify registry signatures/provenance attestations of everything installed.
       - run: npm audit signatures
@@ -105,6 +154,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -113,5 +165,22 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  zizmor:
+    name: Zizmor (workflow security lint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false
+          annotations: true
