@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { safeGetItem, safeSetItem, warnIfDefaultKey } from './storage'
+import { safeGetItem, safeRemoveItem, safeSetItem, warnIfDefaultKey } from './storage'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -31,6 +31,21 @@ describe('safeSetItem', () => {
       throw new Error('QuotaExceededError')
     })
     expect(() => safeSetItem('k', 'v')).not.toThrow()
+  })
+})
+
+describe('safeRemoveItem', () => {
+  it('removes the stored value', () => {
+    localStorage.setItem('k', 'v')
+    safeRemoveItem('k')
+    expect(localStorage.getItem('k')).toBeNull()
+  })
+
+  it('does not throw when localStorage.removeItem throws', () => {
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('SecurityError')
+    })
+    expect(() => safeRemoveItem('k')).not.toThrow()
   })
 })
 

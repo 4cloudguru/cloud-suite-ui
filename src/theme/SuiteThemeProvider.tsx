@@ -39,6 +39,23 @@ export function readReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 }
 
+// getUITheme is a host-provided integration point; its return value's shape is not guaranteed
+// at runtime despite the UIThemeConfig type (a misconfigured host, or a compromised/buggy
+// backend behind it, could send non-string fields). Coerce anything that isn't actually a
+// string to undefined before it reaches theme/URL code that assumes strings.
+function sanitizeUiThemeConfig(config: UIThemeConfig): UIThemeConfig {
+  const str = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
+  return {
+    product_name: str(config.product_name),
+    primary_color: str(config.primary_color),
+    secondary_color_light: str(config.secondary_color_light),
+    secondary_color_dark: str(config.secondary_color_dark),
+    logo_url: str(config.logo_url),
+    favicon_url: str(config.favicon_url),
+    login_hero_url: str(config.login_hero_url),
+  }
+}
+
 export interface SuiteThemeProviderProps {
   children: ReactNode
   /** localStorage key for the persisted light/dark choice (per app). */
@@ -100,7 +117,8 @@ export function SuiteThemeProvider({
 
   // Follow the OS colour scheme until the user picks a theme explicitly.
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: dark)')
+    if (!mediaQuery) return undefined
     const handleChange = (e: MediaQueryListEvent) => {
       if (!safeGetItem(storageKey)) {
         setMode(e.matches ? 'dark' : 'light')
@@ -112,7 +130,8 @@ export function SuiteThemeProvider({
 
   // Reduced-motion is OS-driven too; keep it live like the color-scheme listener above.
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const mediaQuery = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!mediaQuery) return undefined
     const handleChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
@@ -128,10 +147,11 @@ export function SuiteThemeProvider({
       .then(() => getUITheme())
       .then((config) => {
         if (cancelled || !config) return
-        setUiTheme(config)
-        if (config.favicon_url && isSafeUrl(config.favicon_url)) {
+        const sanitized = sanitizeUiThemeConfig(config)
+        setUiTheme(sanitized)
+        if (sanitized.favicon_url && isSafeUrl(sanitized.favicon_url)) {
           const link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')
-          if (link) link.href = config.favicon_url
+          if (link) link.href = sanitized.favicon_url
         }
       })
       .catch(() => {

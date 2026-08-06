@@ -107,6 +107,25 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('scope-admin')).toHaveTextContent('false')
   })
 
+  // Regression guard: a malformed backend response (allowed_scopes missing, null, or not an
+  // array) must not crash the app or grant every scope by accident — it should be treated as
+  // "no scopes", the same fail-closed behaviour as an empty array.
+  it('treats a non-array allowed_scopes as no scopes, without throwing', async () => {
+    const api = makeApi({
+      user: { id: '1', email: 'a@b.com', name: 'Ada' },
+      memberships: [],
+      allowed_scopes: null as unknown as string[],
+    })
+    render(
+      <AuthProvider api={api}>
+        <Probe />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+    expect(screen.getByTestId('scope')).toHaveTextContent('false')
+    expect(screen.getByTestId('scope-admin')).toHaveTextContent('false')
+  })
+
   it('is unauthenticated when the api rejects, and exposes a sanitized authError string', async () => {
     const api = makeApi({
       user: { id: '1', email: 'a@b.com', name: 'Ada' },

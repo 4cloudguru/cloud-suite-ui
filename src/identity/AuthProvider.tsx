@@ -35,7 +35,7 @@ export const ADMIN_SCOPE = 'admin'
 
 // hasScope mirrors the backend's check: the ADMIN_SCOPE wildcard grants everything.
 function scopeSatisfied(scopes: string[], scope: string): boolean {
-  return scopes.includes(ADMIN_SCOPE) || scopes.includes(scope)
+  return Array.isArray(scopes) && (scopes.includes(ADMIN_SCOPE) || scopes.includes(scope))
 }
 
 export interface AuthProviderProps {
@@ -152,7 +152,7 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
   const applyMe = useCallback(
     (me: MeResponse) => {
       setUser(me.user)
-      setAllowedScopes(me.allowed_scopes ?? [])
+      setAllowedScopes(Array.isArray(me.allowed_scopes) ? me.allowed_scopes : [])
       const primary = me.memberships?.find((m) => m.role_template_name)
       setRoleTemplate(
         primary?.role_template_name

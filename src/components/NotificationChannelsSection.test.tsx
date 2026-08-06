@@ -245,6 +245,131 @@ describe('NotificationChannelsSection', () => {
     )
   })
 
+  it('rejects an unsafe (non-URL-scheme) target with no validators supplied', async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(
+      <NotificationChannelsSection
+        channels={[]}
+        channelTypes={channelTypes}
+        eventOptions={eventOptions}
+        onCreate={onCreate}
+        onUpdate={() => Promise.resolve()}
+        onDelete={noop}
+        onTest={noop}
+        onToggleEnabled={noop}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name *'), 'Evil hook')
+    await user.type(within(dialog).getByLabelText(/Target URL/), 'javascript:alert(1)')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await within(dialog).findByText(/valid, safe destination URL/)).toBeInTheDocument()
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+
+  it("rejects a target failing the host's validators.isValidTarget even though it is otherwise a safe URL", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const isValidTarget = vi.fn().mockReturnValue(false)
+    const user = userEvent.setup()
+    render(
+      <NotificationChannelsSection
+        channels={[]}
+        channelTypes={channelTypes}
+        eventOptions={eventOptions}
+        validators={{ isValidTarget }}
+        onCreate={onCreate}
+        onUpdate={() => Promise.resolve()}
+        onDelete={noop}
+        onTest={noop}
+        onToggleEnabled={noop}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name *'), 'Denied hook')
+    await user.type(within(dialog).getByLabelText(/Target URL/), 'https://example.com/hook')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await within(dialog).findByText(/valid, safe destination URL/)).toBeInTheDocument()
+    expect(isValidTarget).toHaveBeenCalledWith('https://example.com/hook', 'webhook')
+    expect(onCreate).not.toHaveBeenCalled()
+  })
+
+  it('creates a channel once both validators.isValidTarget and isSafeUrl accept the target', async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const isValidTarget = vi.fn().mockReturnValue(true)
+    const user = userEvent.setup()
+    render(
+      <NotificationChannelsSection
+        channels={[]}
+        channelTypes={channelTypes}
+        eventOptions={eventOptions}
+        validators={{ isValidTarget }}
+        onCreate={onCreate}
+        onUpdate={() => Promise.resolve()}
+        onDelete={noop}
+        onTest={noop}
+        onToggleEnabled={noop}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name *'), 'Allowed hook')
+    await user.type(within(dialog).getByLabelText(/Target URL/), 'https://example.com/hook')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith({
+        name: 'Allowed hook',
+        type: 'webhook',
+        target: 'https://example.com/hook',
+        events: [],
+        enabled: true,
+      } satisfies NotificationChannelFormValues),
+    )
+  })
+
+  it('rejects an unsafe target for an email-type channel using validators.isValidTarget (no isSafeUrl gate on email)', async () => {
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    const isValidTarget = vi.fn().mockReturnValue(false)
+    const user = userEvent.setup()
+    const emailChannel: NotificationChannelListItem = {
+      id: 'ch-2',
+      name: 'Ops email',
+      type: 'email',
+      events: [],
+      enabled: true,
+      last_status: null,
+    }
+    render(
+      <NotificationChannelsSection
+        channels={[emailChannel]}
+        channelTypes={channelTypes}
+        eventOptions={eventOptions}
+        validators={{ isValidTarget }}
+        onCreate={noop}
+        onUpdate={onUpdate}
+        onDelete={noop}
+        onTest={noop}
+        onToggleEnabled={noop}
+      />,
+    )
+    // Editing an existing email channel seeds `type` from the channel (no Select interaction
+    // needed) \u2014 `target` always seeds blank regardless of channel (see the "leave blank to keep"
+    // convention), so typing a new value here exercises the same validation path a create would.
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText(/Recipient address/), 'ops@example.com')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect(await within(dialog).findByText(/valid recipient address/)).toBeInTheDocument()
+    expect(isValidTarget).toHaveBeenCalledWith('ops@example.com', 'email')
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+
   it('shows a save error message from a thrown Error', async () => {
     const onTest = vi.fn().mockRejectedValue(new Error('boom'))
     const user = userEvent.setup()

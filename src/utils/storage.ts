@@ -27,6 +27,17 @@ export function safeSetItem(storageKey: string, value: string): void {
 }
 
 /**
+ * Removes a localStorage key, silently ignoring failures (see safeSetItem).
+ */
+export function safeRemoveItem(storageKey: string): void {
+  try {
+    localStorage.removeItem(storageKey)
+  } catch {
+    // Storage unavailable — nothing to remove.
+  }
+}
+
+/**
  * Warns (once, when called from a mount-only effect) that a provider is using its generic default
  * storage key. Two same-origin sibling suite apps sharing a default key would collide, so this
  * nudges integrators to pass an app-specific key. No-op when a custom key is already set.

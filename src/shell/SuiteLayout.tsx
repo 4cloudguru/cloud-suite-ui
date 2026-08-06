@@ -1,4 +1,4 @@
-import { Suspense, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Outlet, Link as RouterLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -37,10 +37,14 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import CheckIcon from '@mui/icons-material/Check'
 import { useAuth, SessionExpiryWarning } from '../identity'
 import { useThemeMode } from '../theme'
-import { safeGetItem, safeSetItem } from '../utils/storage'
+import { safeGetItem, safeRemoveItem, safeSetItem, warnIfDefaultKey } from '../utils/storage'
+import { resolveRoutePath } from '../utils/url'
 import type { NavGroup, NavItem } from './types'
 
 const DRAWER_WIDTH = 240
+// Sentinel compared against groupStateStorageKey to decide when to nudge integrators via
+// warnIfDefaultKey — see the groupStateStorageKey JSDoc below.
+const DEFAULT_GROUP_STATE_KEY = 'suite-nav-groups'
 
 export interface SuiteLanguageOption {
   code: string
@@ -73,9 +77,12 @@ export interface SuiteLayoutProps {
   /** Fallback shown while a lazy routed page loads. Default a centered spinner. */
   contentFallback?: ReactNode
   /**
-   * When set, collapsible group open/closed state is persisted to localStorage
-   * under this key and every group defaults to open. Omit for in-memory state
-   * where only the active group starts open.
+   * When set (per app), collapsible group open/closed state is persisted to
+   * localStorage under this key and every group defaults to open. Omit for
+   * in-memory state where only the active group starts open. If this exactly
+   * matches the library's generic default key, a one-time console.warn nudges
+   * you to pass an app-specific key so two same-origin sibling suite apps
+   * don't collide (see warnIfDefaultKey).
    */
   groupStateStorageKey?: string
   /**
@@ -94,6 +101,19 @@ export interface SuiteLayoutProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | false
   /** Route for the sign-in button when unauthenticated (default '/login'). */
   loginPath?: string
+}
+
+// Strictly coerce a parsed (and therefore untrusted) group-open-state record: only entries whose
+// value is the boolean literal true/false are kept, so a tampered/legacy value (string, number,
+// nested object/array) can't corrupt rendering \u2014 it's simply dropped and that group falls back
+// to defaultGroupOpen(key) via the isGroupOpen/toggleGroup `??` lookup, same as a never-persisted
+// key. Mirrors ConsentProvider's sanitizePreferences.
+function sanitizeGroupState(parsed: Record<string, unknown>): Record<string, boolean> {
+  const result: Record<string, boolean> = {}
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === 'boolean') result[key] = value
+  }
+  return result
 }
 
 /**
@@ -124,7 +144,7 @@ export function SuiteLayout({
   const { t, i18n } = useTranslation()
   const location = useLocation()
   const { mode, toggleTheme, productName, logoUrl } = useThemeMode()
-  const { isAuthenticated, user, logout, hasScope } = useAuth()
+  const { isAuthenticated, isLoading, user, logout, hasScope } = useAuth()
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
 
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -136,7 +156,14 @@ export function SuiteLayout({
     const stored = safeGetItem(groupStateStorageKey)
     if (stored) {
       try {
-        return JSON.parse(stored) as Record<string, boolean>
+        const parsed: unknown = JSON.parse(stored)
+        // Only a plain object is a valid stored group-state record; a primitive or array is
+        // treated as no persisted state (falls through to "default every group open" below)
+        // rather than silently applying a malformed value — mirrors ConsentProvider's
+        // loadPreferences.
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return sanitizeGroupState(parsed as Record<string, unknown>)
+        }
       } catch {
         // ignore malformed storage
       }
@@ -144,6 +171,26 @@ export function SuiteLayout({
     // Default every group to open when persistence is enabled.
     return Object.fromEntries(navGroups.map((g) => [g.key, true]))
   })
+
+  useEffect(() => {
+    if (groupStateStorageKey) warnIfDefaultKey('SuiteLayout', groupStateStorageKey, DEFAULT_GROUP_STATE_KEY)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only
+  }, [])
+
+  // AuthProvider (off limits here) fails closed the same way on every route to unauthenticated:
+  // explicit sign-out, a rejected/malformed session check, a failed refreshSession(), or expiry.
+  // Rather than hooking each of those individually, watch isAuthenticated itself so there is one
+  // mechanism for all of them. Edge-triggered on a *prior* true value so it never fires on an
+  // initial unauthenticated mount (a user who never signed in this tab keeps their layout), and
+  // skipped while isLoading is true since isAuthenticated isn't meaningful yet mid-mount-check.
+  const wasAuthenticated = useRef(isAuthenticated)
+  useEffect(() => {
+    if (isLoading) return
+    if (wasAuthenticated.current && !isAuthenticated && groupStateStorageKey) {
+      safeRemoveItem(groupStateStorageKey)
+    }
+    wasAuthenticated.current = isAuthenticated
+  }, [isAuthenticated, isLoading, groupStateStorageKey])
 
   const visibleGroups = useMemo(
     () =>
@@ -167,11 +214,15 @@ export function SuiteLayout({
   // enabled (matches the initializer above), otherwise only the currently-active group.
   const defaultGroupOpen = (key: string) => (groupStateStorageKey ? true : key === activeGroupKey)
 
-  const isGroupOpen = (key: string) => openGroups[key] ?? defaultGroupOpen(key)
+  // Shared by isGroupOpen and toggleGroup so both look up an explicit entry the same way and
+  // fall back to defaultGroupOpen identically (previously hand-duplicated in each).
+  const resolveGroupOpen = (state: Record<string, boolean>, key: string) => state[key] ?? defaultGroupOpen(key)
+
+  const isGroupOpen = (key: string) => resolveGroupOpen(openGroups, key)
 
   const toggleGroup = (key: string) => {
     setOpenGroups((prev) => {
-      const current = prev[key] ?? defaultGroupOpen(key)
+      const current = resolveGroupOpen(prev, key)
       const next = { ...prev, [key]: !current }
       if (groupStateStorageKey) {
         safeSetItem(groupStateStorageKey, JSON.stringify(next))
@@ -197,7 +248,7 @@ export function SuiteLayout({
     const button = (
       <ListItemButton
         component={RouterLink}
-        to={item.path}
+        to={resolveRoutePath(item.path, '/', 'SuiteLayout')}
         selected={active}
         onClick={() => setMobileOpen(false)}
         sx={itemSx(active)}
@@ -446,6 +497,9 @@ export function SuiteLayout({
                 <MenuItem
                   onClick={() => {
                     setAccountAnchor(null)
+                    // Persisted nav-group state is cleared by the isAuthenticated-transition
+                    // effect above, not here — logout() flips isAuthenticated, which is the one
+                    // mechanism covering this click and every other session-ending path.
                     logout()
                   }}
                 >
@@ -457,7 +511,12 @@ export function SuiteLayout({
               </Menu>
             </>
           ) : (
-            <Button color="inherit" startIcon={<LoginIcon />} component={RouterLink} to={loginPath}>
+            <Button
+              color="inherit"
+              startIcon={<LoginIcon />}
+              component={RouterLink}
+              to={resolveRoutePath(loginPath, '/', 'SuiteLayout')}
+            >
               {t('header.login', { defaultValue: 'Sign in' })}
             </Button>
           )}

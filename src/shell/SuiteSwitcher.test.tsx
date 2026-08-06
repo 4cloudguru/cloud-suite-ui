@@ -139,4 +139,37 @@ describe('SuiteSwitcher', () => {
     expect(open).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('unsafe link href'))
   })
+
+  it.each(['_self', '_top', '_parent', '_blank', '_SELF', '_Blank'])(
+    'refuses to use the reserved window target name "%s" and falls back to a plain new tab',
+    (reserved) => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      render(
+        <SuiteSwitcher
+          links={[{ label: 'Sibling', href: 'https://sibling.example', appId: reserved }]}
+          tooltip="Open Sibling"
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Open Sibling' }))
+      expect(open).toHaveBeenCalledWith('https://sibling.example', '_blank', 'noopener,noreferrer')
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('reserved window target name'))
+    },
+  )
+
+  it('warns (but still opens) when a link appId matches currentAppId', () => {
+    const opened = { focus: vi.fn(), opener: {}, closed: false } as unknown as Window
+    const open = vi.spyOn(window, 'open').mockReturnValue(opened)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    render(
+      <SuiteSwitcher
+        links={[{ label: 'Self-labelled', href: 'https://sibling.example', appId: 'terraform-registry' }]}
+        tooltip="Open Sibling"
+        currentAppId="terraform-registry"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Sibling' }))
+    expect(open).toHaveBeenCalledWith('https://sibling.example', 'terraform-registry')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('matches currentAppId'))
+  })
 })

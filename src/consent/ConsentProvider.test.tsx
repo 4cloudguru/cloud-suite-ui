@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ConsentProvider, useConsent } from './ConsentProvider'
 
 function Probe() {
@@ -153,5 +153,26 @@ describe('ConsentProvider', () => {
     }
     expect(() => render(<Bare />)).toThrow('useConsent must be used within a ConsentProvider')
     spy.mockRestore()
+  })
+
+  it('memoizes the context value so a parent re-render with unchanged consent state keeps the same object', () => {
+    const values: unknown[] = []
+    function CaptureProbe() {
+      values.push(useConsent())
+      return null
+    }
+    function Wrapper() {
+      const [tick, setTick] = useState(0)
+      return (
+        <ConsentProvider storageKey="test-consent">
+          <CaptureProbe />
+          <button onClick={() => setTick((t) => t + 1)}>tick {tick}</button>
+        </ConsentProvider>
+      )
+    }
+    render(<Wrapper />)
+    act(() => screen.getByText(/tick/).click())
+    expect(values.length).toBeGreaterThanOrEqual(2)
+    expect(values[1]).toBe(values[0])
   })
 })
