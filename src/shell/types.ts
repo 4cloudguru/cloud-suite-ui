@@ -47,3 +47,8 @@ export interface SuiteLink {
    */
   appId?: string
 }
+
+export interface SuiteLanguageOption {
+  code: string
+  label: string
+}

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   NotificationChannelsSection,
   type NotificationChannelListItem,
   type NotificationChannelFormValues,
 } from './NotificationChannelsSection'
+import { DeleteChannelDialog } from './DeleteChannelDialog'
 
 const channelTypes = [
   { value: 'webhook', label: 'Webhook' },
@@ -178,6 +179,25 @@ describe('NotificationChannelsSection', () => {
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith('ch-1'))
   })
 
+  it('ignores a stale confirm click if the channel is cleared while a delete is still in flight', async () => {
+    // DeleteChannelDialog rendered directly (not through the section) so the test can force the
+    // channel prop to null mid-flight — simulating it disappearing from the parent's state (e.g. a
+    // concurrent list refresh) — to verify the `if (!channel) return` guard in handleDelete stops a
+    // second, stale click from re-invoking onConfirm.
+    const onConfirm = vi.fn().mockResolvedValue(undefined)
+    const { rerender } = render(
+      <DeleteChannelDialog channel={baseChannel} onClose={vi.fn()} onConfirm={onConfirm} />,
+    )
+    const deleteButton = screen.getByRole('button', { name: 'Delete' })
+
+    fireEvent.click(deleteButton)
+    rerender(<DeleteChannelDialog channel={null} onClose={vi.fn()} onConfirm={onConfirm} />)
+    await waitFor(() => expect(deleteButton).not.toBeDisabled())
+
+    fireEvent.click(deleteButton)
+    expect(onConfirm).toHaveBeenCalledTimes(1)
+  })
+
   it('creates a channel through the add dialog, requiring name and target', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -210,6 +230,48 @@ describe('NotificationChannelsSection', () => {
         target: 'https://example.com/hook',
         events: [],
         enabled: true,
+      } satisfies NotificationChannelFormValues),
+    )
+  })
+
+  it('creates a channel with a chosen type, toggled events, and disabled', async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(
+      <NotificationChannelsSection
+        channels={[]}
+        channelTypes={channelTypes}
+        eventOptions={eventOptions}
+        onCreate={onCreate}
+        onUpdate={() => Promise.resolve()}
+        onDelete={noop}
+        onTest={noop}
+        onToggleEnabled={noop}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add channel' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name *'), 'Email hook')
+
+    await user.click(within(dialog).getByRole('combobox', { name: 'Type' }))
+    await user.click(await screen.findByRole('option', { name: 'Email' }))
+    await user.type(within(dialog).getByLabelText(/Recipient address/), 'ops@example.com')
+
+    const publishedCheckbox = within(dialog).getByRole('checkbox', { name: 'Module published' })
+    await user.click(publishedCheckbox)
+    await user.click(publishedCheckbox)
+    await user.click(within(dialog).getByRole('checkbox', { name: 'CVE detected' }))
+    await user.click(within(dialog).getByLabelText('Enabled'))
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith({
+        name: 'Email hook',
+        type: 'email',
+        target: 'ops@example.com',
+        events: ['cve_detected'],
+        enabled: false,
       } satisfies NotificationChannelFormValues),
     )
   })
