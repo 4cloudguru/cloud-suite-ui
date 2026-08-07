@@ -184,3 +184,47 @@ jobs:
         with:
           advanced-security: false
           annotations: true
+
+  # The publish workflow's real human-review gate is a required-reviewer rule on the `release`
+  # GitHub Environment, which lives in repo Settings rather than in git — so nothing in this
+  # repository could previously tell you whether it was still there. This job reads the live
+  # state and fails if it is not, turning an assumed control into a checked one (audit #56).
+  #
+  # GET /environments is documented as readable by anyone with repo read access, so the default
+  # GITHUB_TOKEN with contents:read is sufficient — unlike the branch-protection endpoints, which
+  # need an `administration` scope GITHUB_TOKEN can never be granted.
+  release-gate:
+    name: Release environment protection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Assert the release environment still requires a reviewer and is tag-scoped
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Both queries degrade to 0/false rather than erroring when the control is absent,
+          # so a removed rule trips the guard below instead of failing the step ambiguously.
+          reviewers=$(gh api "repos/$REPO/environments/release" \
+            --jq '[.protection_rules[] | select(.type=="required_reviewers")] | first | .reviewers | length')
+          if [ "$reviewers" -lt 1 ]; then
+            echo "::error::The 'release' environment has no required_reviewers rule, so a publish to the registry would proceed with no human approval. See audit #56."
+            exit 1
+          fi
+
+          tag_scoped=$(gh api "repos/$REPO/environments/release/deployment-branch-policies" \
+            --jq '[.branch_policies[] | "\(.type):\(.name)"] | any(. == "tag:v*")')
+          if [ "$tag_scoped" != "true" ]; then
+            policies=$(gh api "repos/$REPO/environments/release/deployment-branch-policies" \
+              --jq '[.branch_policies[] | "\(.type):\(.name)"] | join(", ")')
+            echo "::error::The 'release' environment does not restrict deployments to v* tags (found: ${policies:-none}). See audit #56."
+            exit 1
+          fi
+
+          echo "release environment OK: $reviewers required reviewer(s), deployments restricted to tag:v*"
