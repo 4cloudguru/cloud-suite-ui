@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.8.1](https://github.com/sethbacon/terraform-suite-ui/compare/v0.8.0...v0.8.1) (2026-08-07)
+
+
+### Bug Fixes
+
+* **ci:** stop requesting an App-token permission the installation lacks ([#127](https://github.com/sethbacon/terraform-suite-ui/issues/127)) ([6d6b6a3](https://github.com/sethbacon/terraform-suite-ui/commit/6d6b6a3dd2c8a44ce357f2e85114dcab1c7f44cd))
+* **identity:** apply the session guards consistently on every async path ([#120](https://github.com/sethbacon/terraform-suite-ui/issues/120)) ([7ee4b58](https://github.com/sethbacon/terraform-suite-ui/commit/7ee4b58124d0d8e96ee00df222f5957298263c8f)), closes [#98](https://github.com/sethbacon/terraform-suite-ui/issues/98) [#99](https://github.com/sethbacon/terraform-suite-ui/issues/99) [#100](https://github.com/sethbacon/terraform-suite-ui/issues/100) [#103](https://github.com/sethbacon/terraform-suite-ui/issues/103) [#104](https://github.com/sethbacon/terraform-suite-ui/issues/104) [#112](https://github.com/sethbacon/terraform-suite-ui/issues/112)
+* validate host-supplied values at every trust boundary and navigation sink ([#121](https://github.com/sethbacon/terraform-suite-ui/issues/121)) ([9de5100](https://github.com/sethbacon/terraform-suite-ui/commit/9de51005827583801b5aa06e7f12c3e2bdf16bcf)), closes [#96](https://github.com/sethbacon/terraform-suite-ui/issues/96) [#101](https://github.com/sethbacon/terraform-suite-ui/issues/101) [#109](https://github.com/sethbacon/terraform-suite-ui/issues/109) [#110](https://github.com/sethbacon/terraform-suite-ui/issues/110) [#111](https://github.com/sethbacon/terraform-suite-ui/issues/111) [#113](https://github.com/sethbacon/terraform-suite-ui/issues/113) [#116](https://github.com/sethbacon/terraform-suite-ui/issues/116)
+
+
+### Documentation
+
+* correct the drifted README claims and record the contracts ([#123](https://github.com/sethbacon/terraform-suite-ui/issues/123)) ([cd20722](https://github.com/sethbacon/terraform-suite-ui/commit/cd207224fcba2350b51c35f863178893b8bbdafb)), closes [#108](https://github.com/sethbacon/terraform-suite-ui/issues/108) [#115](https://github.com/sethbacon/terraform-suite-ui/issues/115) [#118](https://github.com/sethbacon/terraform-suite-ui/issues/118)
+
+
+### Refactor
+
+* **shell:** decompose SuiteLayout and NotificationChannelsSection ([#125](https://github.com/sethbacon/terraform-suite-ui/issues/125)) ([3ce8d6d](https://github.com/sethbacon/terraform-suite-ui/commit/3ce8d6dd869cc00d19612c71fe9e54600ead5b9b)), closes [#114](https://github.com/sethbacon/terraform-suite-ui/issues/114)
+
 ## [0.8.0](https://github.com/sethbacon/terraform-suite-ui/compare/v0.7.1...v0.8.0) (2026-08-01)
 
 

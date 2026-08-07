@@ -1,6 +1,6 @@
 {
   "name": "@sethbacon/terraform-suite-ui",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Shared UI foundation (theme, identity, app shell, and cross-cutting components) for the Terraform suite frontends.",
   "license": "Apache-2.0",
   "private": false,
