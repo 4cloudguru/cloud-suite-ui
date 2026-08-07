@@ -22,11 +22,10 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_DISPATCH_APP_ID }}
           private-key: ${{ secrets.RELEASE_DISPATCH_APP_KEY }}
-          # Scope the token to what release-please itself does (release PR, tag/release, PR
-          # labels/linked-issue comments) instead of the installation's full permission set
-          # (zizmor github-app); matches googleapis/release-please-action's documented minimum.
+          # release-please's documented minimum. A token can only NARROW to permissions the
+          # installation already holds — requesting one it lacks fails the whole mint with a
+          # 422, so do not add to this list without confirming the installation grants it.
           permission-contents: write
-          permission-issues: write
           permission-pull-requests: write
 
       - name: Run release-please
