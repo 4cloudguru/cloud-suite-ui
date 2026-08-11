@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.8.2](https://github.com/sethbacon/terraform-suite-ui/compare/v0.8.1...v0.8.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* **ci:** check out the two ADO extension repos the replay gate requires ([#133](https://github.com/sethbacon/terraform-suite-ui/issues/133)) ([b3b3764](https://github.com/sethbacon/terraform-suite-ui/commit/b3b3764943dcbcebce392a1bccd54ef3d925cc43))
+* **ci:** repair the empty `with:` blocks that broke five workflows at startup ([#131](https://github.com/sethbacon/terraform-suite-ui/issues/131)) ([6132bea](https://github.com/sethbacon/terraform-suite-ui/commit/6132bea61101e4256de05f8754d0caa8372f8982))
+
 ## [0.8.1](https://github.com/sethbacon/terraform-suite-ui/compare/v0.8.0...v0.8.1) (2026-08-07)
 
 
