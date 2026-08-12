@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.9.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.8.1...v0.9.0) (2026-08-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* the package is renamed from @sethbacon/terraform-suite-ui to @4cloudguru/cloud-suite-ui, and now resolves from registry.npmjs.org rather than npm.pkg.github.com. Consumers must update the dependency name, and may delete their .npmrc scope line and NODE_AUTH_TOKEN wiring, because the package is public and needs no authentication to install. Previously published @sethbacon versions remain resolvable, so nothing breaks until a consumer chooses to move.
+
+### Features
+
+* republish as @4cloudguru/cloud-suite-ui on npmjs ([#136](https://github.com/4cloudguru/cloud-suite-ui/issues/136)) ([43aad40](https://github.com/4cloudguru/cloud-suite-ui/commit/43aad404d8190aadcda1e97f824dea2d59e4941d))
+
+
+### Bug Fixes
+
+* **ci:** check out the two ADO extension repos the replay gate requires ([#133](https://github.com/4cloudguru/cloud-suite-ui/issues/133)) ([b3b3764](https://github.com/4cloudguru/cloud-suite-ui/commit/b3b3764943dcbcebce392a1bccd54ef3d925cc43))
+* **ci:** repair the empty `with:` blocks that broke five workflows at startup ([#131](https://github.com/4cloudguru/cloud-suite-ui/issues/131)) ([6132bea](https://github.com/4cloudguru/cloud-suite-ui/commit/6132bea61101e4256de05f8754d0caa8372f8982))
+
 ## [0.8.1](https://github.com/sethbacon/terraform-suite-ui/compare/v0.8.0...v0.8.1) (2026-08-07)
 
 
