@@ -1,15 +1,16 @@
 {
-  "name": "@sethbacon/terraform-suite-ui",
+  "name": "@4cloudguru/cloud-suite-ui",
   "version": "0.8.1",
   "description": "Shared UI foundation (theme, identity, app shell, and cross-cutting components) for the Terraform suite frontends.",
   "license": "Apache-2.0",
   "private": false,
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sethbacon/terraform-suite-ui.git"
+    "url": "git+https://github.com/4cloudguru/cloud-suite-ui.git"
   },
   "type": "module",
   "engines": {

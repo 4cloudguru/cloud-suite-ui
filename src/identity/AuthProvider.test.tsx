@@ -741,8 +741,11 @@ describe('AuthProvider', () => {
           <Probe />
         </AuthProvider>,
       )
-      await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('false'))
-      expect(screen.getByTestId('auth-error')).toHaveTextContent('Session expired')
+      // isAuthenticated is already false before /me resolves, so it cannot be the barrier here.
+      await waitFor(() =>
+        expect(screen.getByTestId('auth-error')).toHaveTextContent('Session expired'),
+      )
+      expect(screen.getByTestId('auth')).toHaveTextContent('false')
     })
 
     // #71 backlog: "applyMe doesn't clear a stale expiry schedule" — re-derived here because a

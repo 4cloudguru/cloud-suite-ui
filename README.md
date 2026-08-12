@@ -1,4 +1,4 @@
-# @sethbacon/terraform-suite-ui
+# @4cloudguru/cloud-suite-ui
 
 Shared UI foundation for the Terraform suite frontends
 ([terraform-registry-frontend](https://github.com/sethbacon/terraform-registry-frontend)
@@ -8,15 +8,15 @@ visual and behavioural parity from a single source of truth.
 
 ## What's inside
 
-| Area           | Exports                                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Tokens**     | `BRAND_PRIMARY`, `SECONDARY_LIGHT`, `SECONDARY_DARK`, dark surfaces, font stack, `BORDER_RADIUS`, `RTL_LANGUAGES`            |
-| **Theme**      | `createAppTheme(mode, prefersReducedMotion, direction, overrides)`, `SuiteThemeProvider`, `useThemeMode`                     |
-| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, types |
-| **Consent**    | `ConsentProvider`, `useConsent`, `ConsentBanner`                                                                             |
+| Area           | Exports                                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tokens**     | `BRAND_PRIMARY`, `SECONDARY_LIGHT`, `SECONDARY_DARK`, dark surfaces, font stack, `BORDER_RADIUS`, `RTL_LANGUAGES`                                                     |
+| **Theme**      | `createAppTheme(mode, prefersReducedMotion, direction, overrides)`, `SuiteThemeProvider`, `useThemeMode`                                                              |
+| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, types               |
+| **Consent**    | `ConsentProvider`, `useConsent`, `ConsentBanner`                                                                                                                      |
 | **Components** | `PageHeader`, `DashboardCard`, `Page`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`, `BrandingSettingsCard` (requires a host-supplied `validators` prop) |
-| **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, nav types                                           |
-| **Utils**      | `isSafeUrl` (host-supplied URL guard for navigation / image sinks)                                                           |
+| **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, nav types                                                                                    |
+| **Utils**      | `isSafeUrl` (host-supplied URL guard for navigation / image sinks)                                                                                                    |
 
 Framework packages (React, MUI, Emotion, i18next, react-router) are
 **peer dependencies** — the consuming app provides a single copy at runtime.
@@ -54,8 +54,15 @@ using the repo's `GITHUB_TOKEN`.
   fetching the tarball and checking it:
 
   ```bash
-  npm pack @sethbacon/terraform-suite-ui
-  gh attestation verify --repo sethbacon/terraform-suite-ui ./sethbacon-terraform-suite-ui-*.tgz
+  npm pack @4cloudguru/cloud-suite-ui
+  gh attestation verify --repo 4cloudguru/cloud-suite-ui ./4cloudguru-cloud-suite-ui-*.tgz
+  ```
+
+  Releases also carry [npm provenance](https://docs.npmjs.com/generating-provenance-statements),
+  verifiable without the `gh` CLI:
+
+  ```bash
+  npm audit signatures
   ```
 
 - CI runs `npm audit --audit-level=moderate` on every push/PR, and CodeQL (`javascript-typescript`)
@@ -68,21 +75,14 @@ See [SECURITY.md](SECURITY.md) for the vulnerability disclosure policy.
 
 ## Consuming (in each frontend)
 
-Add to the app's `.npmrc` so the scope resolves to GitHub Packages:
-
-```ini
-@sethbacon:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
-```
-
-Then:
+The package is public on the npm registry, so no `.npmrc` or auth token is needed:
 
 ```bash
-npm install @sethbacon/terraform-suite-ui
+npm install @4cloudguru/cloud-suite-ui
 ```
 
 ```tsx
-import { SuiteThemeProvider, PageHeader, useAuth } from '@sethbacon/terraform-suite-ui'
+import { SuiteThemeProvider, PageHeader, useAuth } from '@4cloudguru/cloud-suite-ui'
 ```
 
 > This package is a **build-time** dependency only; each app remains independently
