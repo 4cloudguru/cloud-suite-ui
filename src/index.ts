@@ -1,5 +1,5 @@
 /**
- * @sethbacon/terraform-suite-ui
+ * @4cloudguru/cloud-suite-ui
  *
  * Shared UI foundation for the Terraform suite frontends: design tokens, theme,
  * identity, consent, cross-cutting components, and the application shell.

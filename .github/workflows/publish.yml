@@ -1,6 +1,6 @@
 name: Publish package
 
-# Publishes @sethbacon/terraform-suite-ui to GitHub Packages when a GitHub
+# Publishes @4cloudguru/cloud-suite-ui to GitHub Packages when a GitHub
 # Release is published (tag the release vX.Y.Z to match package.json version).
 #
 # workflow_dispatch is kept only for re-running a publish against an EXISTING,
@@ -54,8 +54,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          registry-url: https://npm.pkg.github.com
-          scope: "@sethbacon"
+          registry-url: https://registry.npmjs.org
+          scope: "@4cloudguru"
           package-manager-cache: false
 
       - name: Verify tag matches package.json version
@@ -117,7 +117,7 @@ jobs:
         id: pack
         run: |
           TARBALL=$(npm pack --silent | tail -n1)
-          if ! [[ "$TARBALL" =~ ^sethbacon-terraform-suite-ui-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tgz$ ]]; then
+          if ! [[ "$TARBALL" =~ ^4cloudguru-cloud-suite-ui-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?\.tgz$ ]]; then
             echo "::error::npm pack produced an unexpected filename, refusing to publish it: $TARBALL"
             exit 1
           fi
@@ -185,8 +185,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      packages: write
-      id-token: write # for actions/attest-*
+      id-token: write # for actions/attest-* and npm trusted publishing (OIDC)
       attestations: write
     steps:
       # block, not audit: this job runs no dependency-install/build code (only downloads a
@@ -201,7 +200,7 @@ jobs:
             api.github.com:443
             fulcio.sigstore.dev:443
             github.com:443
-            npm.pkg.github.com:443
+            registry.npmjs.org:443
             rekor.sigstore.dev:443
             tuf-repo-cdn.sigstore.dev:443
 
@@ -211,8 +210,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          registry-url: https://npm.pkg.github.com
-          scope: "@sethbacon"
+          registry-url: https://registry.npmjs.org
+          scope: "@4cloudguru"
           package-manager-cache: false
 
       - name: Download publish artifacts
@@ -223,9 +222,13 @@ jobs:
       # TARBALL flows in via env:, not template-expanded into the script body — the Pack tarball
       # step above already validated its shape, but this way it is never treated as anything but a
       # plain argument to npm publish.
-      - run: npm publish "$TARBALL"
+      # NPM_TOKEN is a bootstrap credential only: npm configures trusted publishing in *package*
+      # settings, which do not exist until a package has been published once. Once 0.9.0 is on the
+      # registry, configure the trusted publisher and drop this env block — OIDC then authenticates
+      # via id-token: write, and provenance becomes automatic.
+      - run: npm publish "$TARBALL" --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TARBALL: ${{ needs.build.outputs.tarball }}
 
       # Attest the exact tarball just published (not dist/** on disk): subject-path is the same

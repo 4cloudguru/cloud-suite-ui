@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "@sethbacon/terraform-suite-ui",
+      "package-name": "@4cloudguru/cloud-suite-ui",
       "include-component-in-tag": false,
       "bump-minor-pre-major": true,
       "changelog-sections": [
