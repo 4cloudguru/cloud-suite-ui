@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.9.1](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.0...v0.9.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* **ci:** spend the replay credential on the one private checkout only ([#139](https://github.com/4cloudguru/cloud-suite-ui/issues/139)) ([1acdbf4](https://github.com/4cloudguru/cloud-suite-ui/commit/1acdbf46b5ba819c74e6b7685f8c3d0065340f80))
+
 ## [0.9.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.8.1...v0.9.0) (2026-08-12)
 
 
