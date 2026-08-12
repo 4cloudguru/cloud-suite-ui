@@ -222,13 +222,11 @@ jobs:
       # TARBALL flows in via env:, not template-expanded into the script body — the Pack tarball
       # step above already validated its shape, but this way it is never treated as anything but a
       # plain argument to npm publish.
-      # NPM_TOKEN is a bootstrap credential only: npm configures trusted publishing in *package*
-      # settings, which do not exist until a package has been published once. Once 0.9.0 is on the
-      # registry, configure the trusted publisher and drop this env block — OIDC then authenticates
-      # via id-token: write, and provenance becomes automatic.
+      # Authentication is npm trusted publishing (OIDC) via the id-token: write permission above;
+      # there is no npm token in this repo. --provenance is redundant under trusted publishing,
+      # which generates it automatically, but is kept explicit so the guarantee is visible here.
       - run: npm publish "$TARBALL" --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TARBALL: ${{ needs.build.outputs.tarball }}
 
       # Attest the exact tarball just published (not dist/** on disk): subject-path is the same
