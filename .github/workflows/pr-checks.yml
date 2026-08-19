@@ -9,6 +9,48 @@ name: PR Checks
 
 jobs:
 
+  # ── The PR title is the release ────
+  # This repository squash-merges, so the PR title becomes the merge commit's
+  # subject, and that subject is the only thing release-please reads to decide
+  # whether a change ships and under which heading. A title it cannot parse is
+  # not rejected, it is ignored: the change lands with no changelog entry and
+  # contributes nothing towards a release.
+  #
+  # The types below are the eleven Conventional Commits defaults plus the two
+  # .release-please-config.json also names, `deps` and `security`. Keep the two
+  # files in step: a type missing here can never be used, and a type missing
+  # there merges without cutting a release.
+  conventional-title:
+    name: Conventional PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check PR title follows Conventional Commits
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            deps
+            security
+          requireScope: false
+          subjectPattern: ^.+$
+          subjectPatternError: >-
+            The PR title must have a non-empty description after the type
+            (e.g. "feat: add login page", not "feat:").
+
   # ── Breaking-change declarations survive the squash ────
   # This repository squash-merges with
   # squash_merge_commit_message=COMMIT_MESSAGES, so every commit body in a PR
