@@ -32,8 +32,10 @@ disclosure.
 
 ## Release Automation Trust Anchor
 
-Releases are cut by a GitHub App (via `actions/create-github-app-token` in
-[release-please.yml](.github/workflows/release-please.yml)), not a personal access token. The App
+Releases are cut by a GitHub App, not a personal access token. The token is minted by
+`actions/create-github-app-token` inside the SHARED release-please workflow that
+[release-please.yml](.github/workflows/release-please.yml) calls — that file is a caller and no
+longer contains the token step itself, so an audit has to follow its pinned `uses:` line. The App
 should be installed **only on this repository** (not org-wide) and granted the minimum
 permissions release-please needs (`contents: write`, `pull-requests: write`); it should not hold
 `packages: write` or any other scope — publishing to the registry is a separate step, gated behind
@@ -60,3 +62,15 @@ outside what `tsup` asked for. This is accepted: `esbuild` is a `tsup` build-tim
 with no breaking change to the CLI/API surface `tsup` uses, and this repository's own `build`,
 `test`, and `typecheck` jobs exercise `tsup` against the overridden `0.28.1` on every run. Drop
 the override once `tsup` bumps its own declared range past `0.28.1`.
+
+## Shared CI workflows
+
+Part of this repository's CI is **defined in another repository** — [`4cloudguru/shared-workflows`](https://github.com/4cloudguru/shared-workflows) — and called from `.github/workflows/`. That is a real supply-chain relationship, and it is recorded here so an audit of this repository does not stop at this repository's own tree.
+
+**What runs, and where it is pinned.** Each caller in `.github/workflows/` names the shared workflow on its `uses:` line, pinned to a full 40-hex commit SHA with a trailing comment naming the release that SHA is. The tag is a label; the SHA is what runs. An unlabelled SHA is rejected by the workflow-hardening gate, because a bare 40-hex ref cannot be reviewed or updated deliberately.
+
+**Why the pins have to agree across repositories.** A shared definition drifts differently from a duplicated file: every repository looks like it is using "the shared one" while sitting on different commits, which is *harder* to see than divergent files, not easier. A signature in `security-orchestration` (`shared-workflow-pin-parity`) reports **disagreement** between callers of the same shared workflow — it reports disagreement rather than staleness, because a repository deliberately held back is a decision while N repositories disagreeing without anyone deciding is drift.
+
+**What the shared repository is itself protected by.** Its `main` requires its own zizmor and actionlint checks with `enforce_admins` enabled, restricts which third-party actions may run to an explicit allowlist, issues a read-only default `GITHUB_TOKEN`, and runs the workflow-hardening gate against itself.
+
+**What this repository still controls.** Triggers, concurrency, and the secrets it passes. Secrets are passed **by name** — never `secrets: inherit`, which would forward every secret in this repository to a workflow owned by someone else. Any `vars.*` a shared workflow reads resolve against **this** repository, so credentials and their installation scope do not move.
