@@ -28,6 +28,7 @@ jobs:
   # token, mint an OIDC token, or forge attestations. Produces the exact tarball + SBOM as artifacts.
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     outputs:
@@ -38,6 +39,11 @@ jobs:
       # holds no publish/attestation secrets (see job comment above), so audit-only here is an
       # acceptable tradeoff; the privileged `publish` job below (no dependency install) uses
       # egress-policy: block with an explicit endpoint allowlist instead.
+      # hardening-exception: egress-audit — this job installs from the npm registry,
+      #   transfers artifacts through the Actions API, and clones this repository;
+      #   harden-runner has never run in this repository, so no endpoint baseline
+      #   exists and a block policy written without one fails closed on its first run;
+      #   audit is what produces that list
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
@@ -180,6 +186,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     # A deployment-branch/tag policy on the "release" environment (Settings > Environments)
     # restricts this job to v* tags; the environment reference also scopes secrets to this job.
     environment: release
