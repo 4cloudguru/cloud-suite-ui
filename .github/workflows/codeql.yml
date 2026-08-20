@@ -18,10 +18,15 @@ jobs:
   analyze:
     name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
     steps:
+      # hardening-exception: egress-audit — this job downloads the CodeQL bundle and
+      #   its query packs and clones this repository; harden-runner has never run in
+      #   this repository, so no endpoint baseline exists and a block policy written
+      #   without one fails closed on its first run; audit is what produces that list
       - uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # v2.20.1
         with:
           egress-policy: audit
