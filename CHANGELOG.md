@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.9.2](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.1...v0.9.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **ci:** refuse to run signature-replay when Dependabot edited the workflow ([#153](https://github.com/4cloudguru/cloud-suite-ui/issues/153)) ([b4ea2fd](https://github.com/4cloudguru/cloud-suite-ui/commit/b4ea2fd8d175d56aa0ec5e10cabfbe97c15459ba))
+
+
+### Documentation
+
+* **security:** record the shared-workflow trust relationship, and fix what it invalidated ([#160](https://github.com/4cloudguru/cloud-suite-ui/issues/160)) ([ad3d423](https://github.com/4cloudguru/cloud-suite-ui/commit/ad3d423f1d3145e00e398125496bcd37474d25ba))
+
 ## [0.9.1](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.0...v0.9.1) (2026-08-12)
 
 
