@@ -12,11 +12,33 @@ visual and behavioural parity from a single source of truth.
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Tokens**     | `BRAND_PRIMARY`, `SECONDARY_LIGHT`, `SECONDARY_DARK`, dark surfaces, font stack, `BORDER_RADIUS`, `RTL_LANGUAGES`                                                     |
 | **Theme**      | `createAppTheme(mode, prefersReducedMotion, direction, overrides)`, `SuiteThemeProvider`, `useThemeMode`                                                              |
-| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, types               |
+| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`, `memberships`, `currentOrganizationId`, `setCurrentOrganization`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, `ORGANIZATION_HEADER`, `DEFAULT_ORGANIZATION_KEY`, `resolveCurrentOrganization`, `shouldOfferOrganizationChoice`, types |
 | **Consent**    | `ConsentProvider`, `useConsent`, `ConsentBanner`                                                                                                                      |
 | **Components** | `PageHeader`, `DashboardCard`, `Page`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`, `BrandingSettingsCard` (requires a host-supplied `validators` prop) |
-| **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, nav types                                                                                    |
+| **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, `OrganizationPicker`, nav types                                                              |
 | **Utils**      | `isSafeUrl` (host-supplied URL guard for navigation / image sinks)                                                                                                    |
+
+### Acting organization
+
+A user who belongs to more than one organization has to say which one a **write** belongs to.
+`AuthProvider` resolves that from their memberships plus a remembered choice, and exposes it as
+`currentOrganizationId`; `OrganizationPicker` renders the choice when there is one.
+
+Three properties are worth knowing before wiring it:
+
+- **A single-organization deployment is unchanged.** With one membership the selection is implied,
+  `OrganizationPicker` renders nothing, and no header has to be sent for writes to work.
+- **The remembered choice is a hint, never an authority.** It selects a membership only when it
+  matches one the server just returned, so a hand-edited value — or one left behind by a different
+  user of the same browser — is discarded rather than honoured. The key is also cleared on sign-out.
+- **Switching re-resolves the session.** `allowed_scopes` is the effective set for the *selected*
+  organization, so `setCurrentOrganization` performs the fresh `getCurrentUser()` that
+  `MeResponse.allowed_scopes` tells hosts they must, rather than leaving stale scopes in place.
+
+Send the selection on every request as `ORGANIZATION_HEADER` (`X-Organization-Id`). The same name
+is defined server-side in `terraform-suite-identity`'s `identity/tenantscope`. It is a **claim**:
+the server verifies it against a scope it resolved itself and refuses anything the caller may not
+reach, so this is not an authorization boundary.
 
 Framework packages (React, MUI, Emotion, i18next, react-router) are
 **peer dependencies** — the consuming app provides a single copy at runtime.

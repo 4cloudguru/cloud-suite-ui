@@ -91,6 +91,44 @@ export interface AuthContextType {
    * wildcard within that membership), and returns `false` when no membership matches.
    */
   hasScope: (scope: string, organizationId?: string) => boolean
+  /**
+   * The organization the user is currently acting in, or null when there is a choice to make
+   * and nobody has made it.
+   *
+   * Resolved from {@link MeResponse.memberships} and a remembered choice — see
+   * `resolveCurrentOrganization`. A caller who belongs to exactly one organization always has
+   * this set and never sees a picker, so a single-organization deployment is unchanged.
+   *
+   * Null with several memberships means "ask them". It is NOT an error state: the server
+   * refuses an unnamed write in exactly the same situation, so the two ends agree about when a
+   * choice is required.
+   *
+   * Hosts send this as the `ORGANIZATION_HEADER` on every request. It is a CLAIM — the server
+   * verifies it against a scope it resolved itself and refuses anything the caller may not
+   * reach — so this is not, and must not be treated as, an authorization boundary.
+   */
+  /**
+   * Every organization the user belongs to, as the server last reported them.
+   *
+   * Exposed so a host can render an organization picker without re-fetching /me or keeping its
+   * own copy that drifts. It is a DISPLAY surface: `role_template_scopes` on a membership is
+   * what {@link AuthContextType.hasScope}'s `organizationId` form resolves against, and neither
+   * is an authorization boundary — the server enforces on every request regardless.
+   */
+  memberships: Membership[]
+  currentOrganizationId: string | null
+  /**
+   * Select the organization to act in, then RE-RESOLVE the session.
+   *
+   * The re-resolution is the point, not a side effect: {@link MeResponse.allowed_scopes} is the
+   * effective set for the selected organization, so continuing to use the previous one after a
+   * switch shows the user affordances for an organization they are no longer acting in. This
+   * performs the `getCurrentUser()` that {@link MeResponse.allowed_scopes} tells hosts they must.
+   *
+   * Ignores an id the user has no membership for, rather than storing it: a selection the
+   * server would refuse on every write is worse than no selection at all.
+   */
+  setCurrentOrganization: (organizationId: string) => void
 }
 
 /** Outcome of a {@link AuthContextType.refreshSession} call. */

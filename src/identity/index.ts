@@ -10,3 +10,9 @@ export type {
   AuthApi,
   RefreshSessionResult,
 } from './types'
+export {
+  ORGANIZATION_HEADER,
+  DEFAULT_ORGANIZATION_KEY,
+  resolveCurrentOrganization,
+  shouldOfferOrganizationChoice,
+} from './organization'
