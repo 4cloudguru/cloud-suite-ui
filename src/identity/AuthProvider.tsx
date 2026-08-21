@@ -8,6 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { safeGetItem, safeRemoveItem, safeSetItem, warnIfDefaultKey } from '../utils/storage'
+import { DEFAULT_ORGANIZATION_KEY, resolveCurrentOrganization } from './organization'
 import type {
   AuthApi,
   AuthContextType,
@@ -59,6 +61,16 @@ export interface AuthProviderProps {
    * their own caches), and omitting it logs a one-time dev warning.
    */
   onClearStorage?: () => void
+  /**
+   * localStorage key under which the selected organization is remembered across reloads. Omit
+   * and the choice is not persisted — a multi-organization user then re-picks on every load.
+   *
+   * The stored value is a HINT, never an authority: it selects a membership only when it
+   * matches one the server just returned, so a value edited by hand, or left behind by a
+   * different user of the same browser, is discarded rather than honoured. The key is also
+   * removed on sign-out, which is belt to that braces.
+   */
+  organizationStorageKey?: string
 }
 
 /**
@@ -112,7 +124,7 @@ function warnIfNoClearStorage(onClearStorage: (() => void) | undefined): void {
   )
 }
 
-export function AuthProvider({ children, api, onClearStorage }: AuthProviderProps) {
+export function AuthProvider({ children, api, onClearStorage, organizationStorageKey }: AuthProviderProps) {
   const apiRef = useRef(api)
   apiRef.current = api
   const onClearStorageRef = useRef(onClearStorage)
@@ -124,6 +136,11 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
   // Full membership list, kept only so hasScope(scope, organizationId) can resolve an
   // org-scoped check (#104) — allowedScopes/roleTemplate remain the display/flat surface.
   const [memberships, setMemberships] = useState<Membership[]>([])
+  // The organization the user is acting in. Derived from memberships + a remembered hint on
+  // every /me, never trusted straight out of storage — see resolveCurrentOrganization.
+  const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
+  const organizationKeyRef = useRef(organizationStorageKey)
+  organizationKeyRef.current = organizationStorageKey
   const [isLoading, setIsLoading] = useState(true)
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null)
   const [sessionExpiresSoon, setSessionExpiresSoon] = useState(false)
@@ -161,6 +178,11 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
     setRoleTemplate(null)
     setAllowedScopes([])
     setMemberships([])
+    setCurrentOrganizationId(null)
+    // Forget the remembered choice on every transition to unauthenticated, so it cannot be
+    // inherited by whoever signs in next on a shared browser. resolveCurrentOrganization would
+    // discard a foreign id anyway; this stops it from lingering at all.
+    if (organizationKeyRef.current) safeRemoveItem(organizationKeyRef.current)
     setSessionExpiresAt(null)
     setSessionExpiresSoon(false)
     setAuthError(null)
@@ -234,7 +256,17 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
     (me: MeResponse) => {
       setUser(me.user)
       setAllowedScopes(Array.isArray(me.allowed_scopes) ? me.allowed_scopes : [])
-      setMemberships(me.memberships ?? [])
+      const nextMemberships = me.memberships ?? []
+      setMemberships(nextMemberships)
+      // Re-derived on EVERY /me, not just the first: a membership removed server-side must drop
+      // the selection that depended on it, and re-deriving is what notices.
+      const remembered = organizationKeyRef.current ? safeGetItem(organizationKeyRef.current) : null
+      const selected = resolveCurrentOrganization(nextMemberships, remembered)
+      setCurrentOrganizationId(selected)
+      if (organizationKeyRef.current) {
+        if (selected) safeSetItem(organizationKeyRef.current, selected)
+        else safeRemoveItem(organizationKeyRef.current)
+      }
       // Deterministic tie-break (#104): sort candidates by organization_id and take the first,
       // rather than trusting the server's membership array order — otherwise a multi-org
       // account can display a role from an unrelated organization depending on response order.
@@ -313,6 +345,9 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
 
   useEffect(() => {
     warnIfNoClearStorage(onClearStorage)
+    if (organizationStorageKey) {
+      warnIfDefaultKey('AuthProvider', organizationStorageKey, DEFAULT_ORGANIZATION_KEY)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally mount-only, mirrors
     // warnIfDefaultKey's usage in SuiteThemeProvider/ConsentProvider
   }, [])
@@ -409,6 +444,34 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
     [allowedScopes, memberships],
   )
 
+  /**
+   * Select the organization to act in, then re-resolve the session.
+   *
+   * THE RE-RESOLUTION IS THE POINT. allowed_scopes is the effective set for the SELECTED
+   * organization; keeping the previous one after a switch shows a user affordances for an
+   * organization they are no longer acting in — the exact hazard MeResponse.allowed_scopes
+   * warns hosts about. loadUser() performs the getCurrentUser() that warning calls for, and its
+   * generation guard means a switch racing a logout is discarded rather than resurrecting a
+   * session.
+   *
+   * An id the user has no membership for is IGNORED, not stored. A selection the server would
+   * refuse on every write is worse than no selection: the picker would show it as current while
+   * nothing worked.
+   */
+  const setCurrentOrganization = useCallback(
+    (organizationId: string) => {
+      const wanted = typeof organizationId === 'string' ? organizationId.trim() : ''
+      if (wanted === '') return
+      if (!memberships.some((m) => m?.organization_id === wanted)) return
+      if (wanted === currentOrganizationId) return
+
+      setCurrentOrganizationId(wanted)
+      if (organizationKeyRef.current) safeSetItem(organizationKeyRef.current, wanted)
+      void loadUser()
+    },
+    [memberships, currentOrganizationId, loadUser],
+  )
+
   const value = useMemo<AuthContextType>(
     () => ({
       user,
@@ -425,6 +488,9 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
       logout,
       refreshSession,
       hasScope,
+      memberships,
+      currentOrganizationId,
+      setCurrentOrganization,
     }),
     [
       user,
@@ -440,6 +506,9 @@ export function AuthProvider({ children, api, onClearStorage }: AuthProviderProp
       logout,
       refreshSession,
       hasScope,
+      memberships,
+      currentOrganizationId,
+      setCurrentOrganization,
     ],
   )
 
