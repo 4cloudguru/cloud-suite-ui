@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.10.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.2...v0.10.0) (2026-08-21)
+
+
+### Features
+
+* **identity:** let a user choose the organization they are acting in ([#164](https://github.com/4cloudguru/cloud-suite-ui/issues/164)) ([d812445](https://github.com/4cloudguru/cloud-suite-ui/commit/d812445c8bc7919b35f04b79365be21fa3554d45))
+
 ## [0.9.2](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.1...v0.9.2) (2026-08-21)
 
 
