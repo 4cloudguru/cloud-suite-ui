@@ -57,3 +57,19 @@ above are.
   `docs:`, `refactor:`, `test:`, `ci:`, `chore:`); `commitlint` enforces this on every PR.
   `package.json`'s `version` and `CHANGELOG.md` are owned by
   [release-please](https://github.com/googleapis/release-please) — don't edit either by hand.
+
+## Tenancy model (estate-wide)
+
+The suite is moving to an explicit tenancy model: **the host is the content tenant**
+(modules, providers, binaries belong to a host), **the organisation is the editorial
+scope** (who may edit, set policy, approve a version), and the state manager is
+**single-host by design**.
+
+**Read [`docs/tenancy-model.md` in terraform-suite-identity](https://github.com/sethbacon/terraform-suite-identity/blob/main/docs/tenancy-model.md) before changing
+anything that touches `organization_id`, namespace ownership, the Terraform protocol
+surface, or a scoped read.** It also records what must not be done — two of those are
+one-way doors that read as ordinary tidy-up.
+
+Most relevant here: **an unscoped read is not automatically a finding.** The registry's
+consumption surface is unscoped by design under the current model. A guard should assert
+that every unscoped read is *declared*, not that none exists.
