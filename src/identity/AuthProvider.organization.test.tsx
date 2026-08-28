@@ -157,3 +157,34 @@ describe('AuthProvider organization selection', () => {
     expect(localStorage.length).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// selectableOrganizations must not outlive the session.
+//
+// resetSessionState clears the selection and forgets the remembered key so a
+// signed-out browser holds no acting organization. The re-resolve effect runs on
+// the same state change, and a host that keeps passing the prop through a logout
+// would have a single-entry universe re-selected the instant the session ended --
+// the one value that must never be inherited by whoever signs in next.
+describe('a supplied organization universe and sign-out', () => {
+  it('does not re-select an organization after logout', async () => {
+    const api = makeApi(meWith([]))
+    render(
+      <AuthProvider
+        api={api}
+        onClearStorage={() => {}}
+        organizationStorageKey={STORAGE_KEY}
+        selectableOrganizations={[{ organization_id: 'only', organization_name: 'Only' }]}
+      >
+        <Probe />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('org').textContent).toBe('only'))
+
+    await act(async () => {
+      lastLogout?.()
+    })
+    await waitFor(() => expect(screen.getByTestId('org').textContent).toBe('none'))
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+})
