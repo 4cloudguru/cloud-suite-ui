@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.11.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.10.0...v0.11.0) (2026-08-28)
+
+
+### Features
+
+* **identity:** let a platform administrator name the organization they act in ([#177](https://github.com/4cloudguru/cloud-suite-ui/issues/177)) ([c6e61a9](https://github.com/4cloudguru/cloud-suite-ui/commit/c6e61a9e64f4ade479c13501fe82c288389e77ac))
+
+
+### Documentation
+
+* point at the estate tenancy model ([#174](https://github.com/4cloudguru/cloud-suite-ui/issues/174)) ([35f2ad9](https://github.com/4cloudguru/cloud-suite-ui/commit/35f2ad9aa7c21c9b43bc8b269a5a965124661517))
+
 ## [0.10.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.9.2...v0.10.0) (2026-08-21)
 
 
