@@ -94,3 +94,95 @@ describe('OrganizationPicker', () => {
     expect(screen.getByText('b')).toBeTruthy()
   })
 })
+
+// ---------------------------------------------------------------------------
+// The platform administrator (sethbacon/terraform-state-manager-backend#437).
+//
+// This is the live defect these tests exist for. The server refuses an unnamed
+// write from a platform administrator UNCONDITIONALLY -- not only when they
+// reach several organizations -- because reaching every organization is not the
+// same as belonging to one. A picker driven by memberships therefore renders
+// NOTHING for exactly the caller who is required to choose, and the refusal
+// ("name the organization to act in") names a header the UI has no control for.
+describe('OrganizationPicker for a caller who is not a member of what they may act in', () => {
+  function renderWithDirectory(
+    memberships: Membership[],
+    directory: { organization_id: string; organization_name?: string }[],
+  ) {
+    const api = makeApi(memberships)
+    render(
+      <AuthProvider
+        api={api}
+        onClearStorage={() => {}}
+        organizationStorageKey="test.org"
+        selectableOrganizations={directory}
+      >
+        <OrganizationPicker />
+      </AuthProvider>,
+    )
+    return api
+  }
+
+  it('offers the deployment to an administrator who belongs to nothing', async () => {
+    renderWithDirectory([], [
+      { organization_id: 'a', organization_name: 'Alpha' },
+      { organization_id: 'b', organization_name: 'Beta' },
+    ])
+    const button = await screen.findByLabelText('Switch organization')
+    await userEvent.click(button)
+    expect(await screen.findByText('Alpha')).toBeInTheDocument()
+    expect(screen.getByText('Beta')).toBeInTheDocument()
+  })
+
+  // The click has to STICK. setCurrentOrganization used to validate against
+  // memberships alone, so an administrator could open the menu, choose, and have
+  // the selection silently discarded -- the write still refused, for want of the
+  // header the click was meant to supply.
+  it('records a choice the caller has no membership for', async () => {
+    renderWithDirectory([], [
+      { organization_id: 'a', organization_name: 'Alpha' },
+      { organization_id: 'b', organization_name: 'Beta' },
+    ])
+    await userEvent.click(await screen.findByLabelText('Switch organization'))
+    await userEvent.click(await screen.findByText('Beta'))
+    await waitFor(() => expect(localStorage.getItem('test.org')).toBe('b'))
+    expect(await screen.findByText('Beta')).toBeInTheDocument()
+  })
+
+  // The directory is a SEPARATE request and settles after /me. If the provider
+  // only resolved during applyMe, the picker would populate while the selection
+  // stayed at the membership-only answer.
+  it('re-resolves when the directory arrives after the session', async () => {
+    const api = makeApi([])
+    const { rerender } = render(
+      <AuthProvider api={api} onClearStorage={() => {}} organizationStorageKey="test.org">
+        <OrganizationPicker />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(api.getCurrentUser).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Switch organization')).toBeNull()
+
+    rerender(
+      <AuthProvider
+        api={api}
+        onClearStorage={() => {}}
+        organizationStorageKey="test.org"
+        selectableOrganizations={[{ organization_id: 'only', organization_name: 'Only' }]}
+      >
+        <OrganizationPicker />
+      </AuthProvider>,
+    )
+    // A universe of exactly one is implied and shows no control, but the
+    // SELECTION must now exist -- that is the header the write needs.
+    await waitFor(() => expect(localStorage.getItem('test.org')).toBe('only'))
+    expect(screen.queryByLabelText('Switch organization')).toBeNull()
+  })
+
+  // The compatibility property. An ordinary single-organization caller is the
+  // common case and must gain no UI, whatever this change added.
+  it('still renders nothing for a single-organization caller with no extras', async () => {
+    const api = renderPicker([member('only', 'Only Org')])
+    await waitFor(() => expect(api.getCurrentUser).toHaveBeenCalled())
+    expect(screen.queryByLabelText('Switch organization')).toBeNull()
+  })
+})

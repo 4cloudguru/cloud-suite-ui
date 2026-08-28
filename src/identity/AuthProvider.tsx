@@ -9,7 +9,12 @@ import {
   type ReactNode,
 } from 'react'
 import { safeGetItem, safeRemoveItem, safeSetItem, warnIfDefaultKey } from '../utils/storage'
-import { DEFAULT_ORGANIZATION_KEY, resolveCurrentOrganization } from './organization'
+import {
+  DEFAULT_ORGANIZATION_KEY,
+  actingOrganizationChoices,
+  resolveCurrentOrganization,
+} from './organization'
+import type { SelectableOrganization } from './organization'
 import type {
   AuthApi,
   AuthContextType,
@@ -71,6 +76,24 @@ export interface AuthProviderProps {
    * removed on sign-out, which is belt to that braces.
    */
   organizationStorageKey?: string
+  /**
+   * Organizations the caller may act in BEYOND their memberships.
+   *
+   * Supply this only for a caller the server actually treats that way — in
+   * practice a platform administrator, who reaches every organization and
+   * belongs to none. For everyone else leave it undefined: their memberships
+   * already are the set, and widening it would offer organizations the server
+   * refuses on every write.
+   *
+   * It is a DISPLAY universe, not a grant. The server resolves the caller's
+   * scope itself on every request and refuses an organization they may not
+   * reach, so adding an entry here grants nothing and removing one restricts
+   * nobody.
+   *
+   * The array is compared by the ids it contains, so a host may pass a freshly
+   * built array on every render without re-resolving anything.
+   */
+  selectableOrganizations?: SelectableOrganization[]
 }
 
 /**
@@ -124,7 +147,13 @@ function warnIfNoClearStorage(onClearStorage: (() => void) | undefined): void {
   )
 }
 
-export function AuthProvider({ children, api, onClearStorage, organizationStorageKey }: AuthProviderProps) {
+export function AuthProvider({
+  children,
+  api,
+  onClearStorage,
+  organizationStorageKey,
+  selectableOrganizations,
+}: AuthProviderProps) {
   const apiRef = useRef(api)
   apiRef.current = api
   const onClearStorageRef = useRef(onClearStorage)
@@ -141,6 +170,18 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
   const [currentOrganizationId, setCurrentOrganizationId] = useState<string | null>(null)
   const organizationKeyRef = useRef(organizationStorageKey)
   organizationKeyRef.current = organizationStorageKey
+  // Read through a ref for the same reason api/onClearStorage are: a host that
+  // rebuilds the array each render must not invalidate every callback that
+  // consults it. The EFFECT below keys on the ids instead, so a re-resolve
+  // happens when the set genuinely changes and not merely when the array does.
+  const selectableRef = useRef(selectableOrganizations)
+  selectableRef.current = selectableOrganizations
+  // A stable identity for "which organizations, in which order" — the only thing
+  // a change of this prop can mean. Ids cannot contain a newline, so joining on
+  // one cannot make two different sets collide.
+  const selectableKey = (selectableOrganizations ?? [])
+    .map((o) => o?.organization_id ?? '')
+    .join('\n')
   const [isLoading, setIsLoading] = useState(true)
   const [sessionExpiresAt, setSessionExpiresAt] = useState<Date | null>(null)
   const [sessionExpiresSoon, setSessionExpiresSoon] = useState(false)
@@ -261,7 +302,7 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
       // Re-derived on EVERY /me, not just the first: a membership removed server-side must drop
       // the selection that depended on it, and re-deriving is what notices.
       const remembered = organizationKeyRef.current ? safeGetItem(organizationKeyRef.current) : null
-      const selected = resolveCurrentOrganization(nextMemberships, remembered)
+      const selected = resolveCurrentOrganization(nextMemberships, remembered, selectableRef.current)
       setCurrentOrganizationId(selected)
       if (organizationKeyRef.current) {
         if (selected) safeSetItem(organizationKeyRef.current, selected)
@@ -434,6 +475,44 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
     }
   }, [scheduleSessionWarning, logout, loadUser])
 
+  // The choice universe, recomputed when either half of it moves.
+  const organizationChoices = useMemo(
+    () => actingOrganizationChoices(memberships, selectableOrganizations),
+    // selectableKey rather than the array: a host rebuilding it each render must not
+    // churn this. memberships is state and is already referentially stable per /me.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memberships, selectableKey],
+  )
+
+  // RE-RESOLVE WHEN THE EXTRA ORGANIZATIONS ARRIVE, because they do not arrive with /me.
+  //
+  // A host learns the organizations a platform administrator may act in from a
+  // SEPARATE request, which settles after applyMe has already run and resolved
+  // against memberships alone. Without this the directory lands, the picker
+  // populates — and currentOrganizationId is still whatever the membership-only
+  // pass decided, which for an administrator who belongs to nothing is null.
+  //
+  // GATED ON AN AUTHENTICATED SESSION. resetSessionState clears the selection and
+  // forgets the remembered key precisely so a signed-out browser holds no acting
+  // organization; a host that keeps passing this prop through a logout would
+  // otherwise have it re-derived here, and a single-entry universe would silently
+  // re-select. That is the one value that must not survive a sign-out.
+  useEffect(() => {
+    if (user === null) return
+    const stillReachable =
+      currentOrganizationId !== null &&
+      organizationChoices.some((o) => o.organization_id === currentOrganizationId)
+    if (stillReachable) return
+    const remembered = organizationKeyRef.current ? safeGetItem(organizationKeyRef.current) : null
+    const next = resolveCurrentOrganization(memberships, remembered, selectableRef.current)
+    if (next === currentOrganizationId) return
+    setCurrentOrganizationId(next)
+    if (organizationKeyRef.current) {
+      if (next) safeSetItem(organizationKeyRef.current, next)
+      else safeRemoveItem(organizationKeyRef.current)
+    }
+  }, [user, memberships, organizationChoices, currentOrganizationId])
+
   const hasScope = useCallback(
     (scope: string, organizationId?: string) => {
       if (organizationId === undefined) return scopeSatisfied(allowedScopes, scope)
@@ -454,22 +533,28 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
    * generation guard means a switch racing a logout is discarded rather than resurrecting a
    * session.
    *
-   * An id the user has no membership for is IGNORED, not stored. A selection the server would
+   * An id OUTSIDE THE CHOICE UNIVERSE is IGNORED, not stored. A selection the server would
    * refuse on every write is worse than no selection: the picker would show it as current while
    * nothing worked.
+   *
+   * The universe is memberships PLUS `selectableOrganizations`, not memberships alone. Checking
+   * memberships alone is what made this unusable for a platform administrator: they belong to
+   * no organization, so every id they could pick failed this test silently — the click landed,
+   * nothing changed, and the write kept being refused for want of the very header the click was
+   * supposed to supply.
    */
   const setCurrentOrganization = useCallback(
     (organizationId: string) => {
       const wanted = typeof organizationId === 'string' ? organizationId.trim() : ''
       if (wanted === '') return
-      if (!memberships.some((m) => m?.organization_id === wanted)) return
+      if (!organizationChoices.some((o) => o?.organization_id === wanted)) return
       if (wanted === currentOrganizationId) return
 
       setCurrentOrganizationId(wanted)
       if (organizationKeyRef.current) safeSetItem(organizationKeyRef.current, wanted)
       void loadUser()
     },
-    [memberships, currentOrganizationId, loadUser],
+    [organizationChoices, currentOrganizationId, loadUser],
   )
 
   const value = useMemo<AuthContextType>(
@@ -489,6 +574,7 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
       refreshSession,
       hasScope,
       memberships,
+      organizationChoices,
       currentOrganizationId,
       setCurrentOrganization,
     }),
@@ -507,6 +593,7 @@ export function AuthProvider({ children, api, onClearStorage, organizationStorag
       refreshSession,
       hasScope,
       memberships,
+      organizationChoices,
       currentOrganizationId,
       setCurrentOrganization,
     ],

@@ -17,12 +17,18 @@ export interface OrganizationPickerProps {
  *
  * # It renders nothing unless there is an actual choice
  *
- * A caller who belongs to one organization is already acting in it, so there is
- * nothing to pick and no control to explain. That is what keeps a
+ * A caller with one organization to choose from is already acting in it, so
+ * there is nothing to pick and no control to explain. That is what keeps a
  * single-organization deployment visually unchanged — the common case sees no
  * new UI at all. The rule comes from {@link shouldOfferOrganizationChoice}
  * rather than being re-derived here, so this cannot disagree with the provider
  * about when a choice exists.
+ *
+ * The set it renders is `organizationChoices`, which for an ordinary caller IS
+ * their memberships and for a platform administrator is the organizations the
+ * host established they may act in. Reading memberships directly is what left an
+ * administrator with no control and no way to answer the server's demand that
+ * they name one.
  *
  * # Switching re-resolves the session, and that is deliberate
  *
@@ -44,10 +50,16 @@ export function OrganizationPicker({
   tooltip = 'Switch organization',
   unselectedLabel = 'Select organization',
 }: OrganizationPickerProps) {
-  const { memberships, currentOrganizationId, setCurrentOrganization } = useAuth()
+  const { memberships, organizationChoices, currentOrganizationId, setCurrentOrganization } =
+    useAuth()
   const [anchor, setAnchor] = useState<null | HTMLElement>(null)
 
-  const list = memberships ?? []
+  // organizationChoices, NOT memberships. For an ordinary caller the two are the
+  // same list and nothing changes. For a platform administrator they are not:
+  // they belong to no organization, so a membership-driven picker renders
+  // nothing for exactly the caller the server insists must choose — the control
+  // disappears at the moment it is mandatory.
+  const list = organizationChoices ?? memberships ?? []
   if (!shouldOfferOrganizationChoice(list)) return null
 
   const current = list.find((m) => m.organization_id === currentOrganizationId)

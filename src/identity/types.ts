@@ -1,3 +1,5 @@
+import type { SelectableOrganization } from './organization'
+
 export interface User {
   id: string
   email: string
@@ -116,6 +118,19 @@ export interface AuthContextType {
    * is an authorization boundary — the server enforces on every request regardless.
    */
   memberships: Membership[]
+  /**
+   * The organizations the caller may CHOOSE BETWEEN when naming the one a write belongs to:
+   * {@link memberships} plus any `selectableOrganizations` the host supplied.
+   *
+   * Distinct from `memberships` because for a platform administrator the two are different
+   * sets — they reach every organization and belong to none — and a picker driven by
+   * memberships alone therefore offers such a caller nothing at all, while the server refuses
+   * every write of theirs for want of a choice.
+   *
+   * Like `memberships` this is a DISPLAY surface and not an authorization boundary; the server
+   * re-derives scope on every request and refuses anything the caller may not reach.
+   */
+  organizationChoices: SelectableOrganization[]
   currentOrganizationId: string | null
   /**
    * Select the organization to act in, then RE-RESOLVE the session.

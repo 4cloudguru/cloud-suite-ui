@@ -13,6 +13,8 @@ export type {
 export {
   ORGANIZATION_HEADER,
   DEFAULT_ORGANIZATION_KEY,
+  actingOrganizationChoices,
   resolveCurrentOrganization,
   shouldOfferOrganizationChoice,
 } from './organization'
+export type { SelectableOrganization } from './organization'

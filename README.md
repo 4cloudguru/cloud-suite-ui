@@ -12,7 +12,7 @@ visual and behavioural parity from a single source of truth.
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Tokens**     | `BRAND_PRIMARY`, `SECONDARY_LIGHT`, `SECONDARY_DARK`, dark surfaces, font stack, `BORDER_RADIUS`, `RTL_LANGUAGES`                                                     |
 | **Theme**      | `createAppTheme(mode, prefersReducedMotion, direction, overrides)`, `SuiteThemeProvider`, `useThemeMode`                                                              |
-| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`, `memberships`, `currentOrganizationId`, `setCurrentOrganization`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, `ORGANIZATION_HEADER`, `DEFAULT_ORGANIZATION_KEY`, `resolveCurrentOrganization`, `shouldOfferOrganizationChoice`, types |
+| **Identity**   | `AuthProvider` (parameterised by an `AuthApi`), `useAuth` (returns `hasScope`, `memberships`, `organizationChoices`, `currentOrganizationId`, `setCurrentOrganization`), `ADMIN_SCOPE`, `SESSION_WARNING_LEAD_MS`, `SessionExpiryWarning`, `ORGANIZATION_HEADER`, `DEFAULT_ORGANIZATION_KEY`, `resolveCurrentOrganization`, `shouldOfferOrganizationChoice`, `actingOrganizationChoices`, types |
 | **Consent**    | `ConsentProvider`, `useConsent`, `ConsentBanner`                                                                                                                      |
 | **Components** | `PageHeader`, `DashboardCard`, `Page`, `NotificationChannelsSection`, `ApiKeyExpirySettingsCard`, `BrandingSettingsCard` (requires a host-supplied `validators` prop) |
 | **Shell**      | `SuiteLayout` (parameterised by nav + branding + auth), `SuiteSwitcher`, `OrganizationPicker`, nav types                                                              |
@@ -34,6 +34,14 @@ Three properties are worth knowing before wiring it:
 - **Switching re-resolves the session.** `allowed_scopes` is the effective set for the *selected*
   organization, so `setCurrentOrganization` performs the fresh `getCurrentUser()` that
   `MeResponse.allowed_scopes` tells hosts they must, rather than leaving stale scopes in place.
+- **A platform administrator is not a member of anything.** They reach every organization and
+  belong to none, so their memberships are the wrong universe to derive a choice from: the server
+  insists such a caller names one, and a membership-driven picker offers them nothing to name.
+  Pass the organizations they may act in as `selectableOrganizations` and the picker offers those;
+  `organizationChoices` is the resulting union and is what `OrganizationPicker` renders and what
+  `setCurrentOrganization` validates against. Omit the prop and every existing behaviour is
+  unchanged, because the union is then the memberships themselves. It is a display universe, not
+  a grant — the server still refuses any organization the caller may not reach.
 
 Send the selection on every request as `ORGANIZATION_HEADER` (`X-Organization-Id`). The same name
 is defined server-side in `terraform-suite-identity`'s `identity/tenantscope`. It is a **claim**:
