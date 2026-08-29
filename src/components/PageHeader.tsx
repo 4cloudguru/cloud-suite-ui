@@ -17,37 +17,39 @@ export interface PageHeaderProps {
  * icon and one-line description on the left, plus optional right-aligned actions.
  * Wraps on small screens so actions drop below the title rather than overflowing.
  */
-export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, actions, icon }) => (
-  <Box
-    sx={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      flexWrap: 'wrap',
-      gap: 2,
-      mb: 3,
-    }}
-  >
-    <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        {icon && (
-          <Box
-            aria-hidden
-            sx={{ display: 'flex', color: 'primary.main', '& > svg': { fontSize: 32 } }}
-          >
-            {icon}
-          </Box>
+export function PageHeader({ title, description, actions, icon }: PageHeaderProps) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        flexWrap: 'wrap',
+        gap: 2,
+        mb: 3,
+      }}
+    >
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {icon && (
+            <Box
+              aria-hidden
+              sx={{ display: 'flex', color: 'primary.main', '& > svg': { fontSize: 32 } }}
+            >
+              {icon}
+            </Box>
+          )}
+          <Typography variant="h4" component="h1">
+            {title}
+          </Typography>
+        </Box>
+        {description && (
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+            {description}
+          </Typography>
         )}
-        <Typography variant="h4" component="h1">
-          {title}
-        </Typography>
       </Box>
-      {description && (
-        <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-          {description}
-        </Typography>
-      )}
+      {actions}
     </Box>
-    {actions}
-  </Box>
-)
+  )
+}
