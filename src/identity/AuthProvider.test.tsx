@@ -728,12 +728,19 @@ describe('AuthProvider', () => {
       expect(onClearStorage).toHaveBeenCalledTimes(1)
     })
 
-    it('fails closed immediately when the resolved session is already lapsed', async () => {
+    // #178 — a client clock far enough ahead of the server makes the server's own
+    // session_expires_at read as already-lapsed, and expiring on that re-arms on EVERY /me:
+    // a login loop for a session the server considers valid. A 200 from /me is the server
+    // asserting the session is live, so it outranks our unsynchronised clock. A genuinely
+    // expired session 401s and is failed closed by loadUser's catch instead.
+    it('a lapsed server expiry is treated as clock skew, not as an expiry', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const onClearStorage = vi.fn()
       const api = makeApi({
         user: { id: '1', email: 'a@b.com', name: 'Ada' },
         memberships: [],
         allowed_scopes: ['state:read'],
-        // Already in the past by the time the mount-time /me resolves.
+        // In the past against THIS clock, but supplied by a server that answered 200.
         session_expires_at: new Date(Date.now() - 1000).toISOString(),
       })
       render(
@@ -741,11 +748,48 @@ describe('AuthProvider', () => {
           <Probe />
         </AuthProvider>,
       )
-      // isAuthenticated is already false before /me resolves, so it cannot be the barrier here.
-      await waitFor(() =>
-        expect(screen.getByTestId('auth-error')).toHaveTextContent('Session expired'),
+      await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+      expect(screen.getByTestId('auth-error')).toHaveTextContent('none')
+      // No delay we can trust, so nothing is scheduled and nothing is warned — the same
+      // posture as an unparseable expiry.
+      expect(screen.getByTestId('expires-at')).toHaveTextContent('')
+      expect(screen.getByTestId('expires-soon')).toHaveTextContent('false')
+      // The session survives, so host storage must not be cleared out from under it.
+      expect(onClearStorage).not.toHaveBeenCalled()
+      // Silent recovery would be its own trap: the skew is still real and still needs fixing.
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('clock'))
+      warn.mockRestore()
+    })
+
+    // The other half of #178: skew cancels when both sides of the subtraction come from this
+    // clock, so a non-positive refresh lifetime is a real one and must still fail closed.
+    // Without this the skew branch could be widened until it swallowed a genuine expiry.
+    //
+    // Asserted on expireSession's onClearStorage rather than on the final authError, because
+    // refreshSession re-resolves /me straight afterwards and that 200 legitimately restores the
+    // session — the fail-closed transition here is real but transient.
+    it('a refresh handing back an already-dead lifetime is an expiry, not skew', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const onClearStorage = vi.fn()
+      const api = makeApi({
+        user: { id: '1', email: 'a@b.com', name: 'Ada' },
+        memberships: [],
+        allowed_scopes: ['state:read'],
+        session_expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      })
+      api.refreshToken = vi.fn().mockResolvedValue({ expires_in: 0 })
+      render(
+        <AuthProvider api={api} onClearStorage={onClearStorage}>
+          <Probe />
+        </AuthProvider>,
       )
-      expect(screen.getByTestId('auth')).toHaveTextContent('false')
+      await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+      expect(onClearStorage).not.toHaveBeenCalled()
+      await act(async () => screen.getByText('refresh').click())
+      // Took the fail-closed branch, not the skew branch.
+      expect(onClearStorage).toHaveBeenCalled()
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('clock'))
+      warn.mockRestore()
     })
 
     // #71 backlog: "applyMe doesn't clear a stale expiry schedule" — re-derived here because a
