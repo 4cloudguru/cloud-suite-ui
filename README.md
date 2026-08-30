@@ -151,7 +151,11 @@ applies uniformly to every component.
 - **`onClearStorage` is how you clear YOUR app's cached auth data when the session ends** — on
   explicit logout AND when the session fails closed (a 401, a lapsed session, or a malformed
   `/me` response). Pass it whenever your app caches anything auth-related (a bearer token, query
-  data keyed to the signed-in user) outside of `AuthProvider`'s own React state.
+  data keyed to the signed-in user) outside of `AuthProvider`'s own React state. One deliberate
+  carve-out: a `/me` that returns 200 with a `session_expires_at` **already in the past** is read
+  as a disagreement between the client and server clocks, not as an expiry — no expiry is
+  scheduled, `onClearStorage` does not fire, and a `console.warn` names the skew. Otherwise a
+  browser clock running ahead of the server would lock the user out on every `/me` (#178).
 - **`hasScope`/`allowedScopes` are UI-visibility gates only — NOT an authorization boundary.**
   They hide/show nav items and affordances client-side; every backend endpoint must
   independently re-enforce authorization on every request regardless of what the client believes.
