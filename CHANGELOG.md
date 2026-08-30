@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.12.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.11.1...v0.12.0) (2026-08-30)
+
+
+### Features
+
+* **identity:** accept a session lifetime as a duration, not just an instant ([#183](https://github.com/4cloudguru/cloud-suite-ui/issues/183)) ([3d6f066](https://github.com/4cloudguru/cloud-suite-ui/commit/3d6f06673bd898d0e33752de3119c5456b00e5a3))
+
 ## [0.11.1](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.11.0...v0.11.1) (2026-08-30)
 
 
