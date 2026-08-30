@@ -361,7 +361,14 @@ export function AuthProvider({
           }
           : null,
       )
-      if (me.session_expires_at) {
+      if (typeof me.session_expires_in === 'number' && Number.isFinite(me.session_expires_in)) {
+        // A DURATION, so it is scheduled client-relative: the server measured it, this clock
+        // applies it, and neither half of the subtraction crosses the boundary between them.
+        // Skew therefore cannot enter, which is why this is preferred over the absolute instant
+        // whenever the server offers it (#181). Checked before session_expires_at rather than
+        // after, so a server that sends both gets the skew-immune path.
+        scheduleSessionWarning(new Date(Date.now() + me.session_expires_in * 1000), 'client-relative')
+      } else if (me.session_expires_at) {
         scheduleSessionWarning(new Date(me.session_expires_at), 'server-absolute')
       } else {
         // A later /me that omits the expiry must clear any prior schedule/warning rather than
