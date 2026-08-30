@@ -27,7 +27,36 @@ export interface MeResponse {
    * against the matching {@link Membership.role_template_scopes} instead of this field.
    */
   allowed_scopes: string[]
+  /**
+   * Absolute session expiry as an ISO-8601 instant.
+   *
+   * Read against a clock this library does not control, so it is the FALLBACK — prefer
+   * {@link MeResponse.session_expires_in}. A lapsed value here is treated as clock skew rather
+   * than as an expiry, because a 200 response dated as already over is self-contradictory (#178).
+   */
   session_expires_at?: string
+  /**
+   * Remaining session lifetime in SECONDS, measured by the server as it built this response.
+   *
+   * PREFERRED over {@link MeResponse.session_expires_at} when present, and the reason is clock
+   * skew. An absolute instant must be compared against the browser's clock, so a client whose
+   * clock disagrees with the server mis-schedules the expiry by exactly the skew — and before
+   * #178, a skew larger than the remaining lifetime locked the user out entirely. A duration is
+   * measured wholly on the server and applied wholly on the client, so no shared clock is assumed
+   * and skew cannot enter the arithmetic at all. That is why this supersedes the offset-correction
+   * approaches: it removes the assumption instead of compensating for it (#181).
+   *
+   * The client schedules from its own `Date.now()` plus this value, so the schedule runs late by
+   * roughly the response's transit time. That is the safe direction to err — the UI keeps a
+   * session marginally past its real end rather than ending a live one early, and the server
+   * rejects an genuinely expired credential regardless of what the UI believes.
+   *
+   * A non-positive value fails the session closed. Unlike a lapsed `session_expires_at`, no clock
+   * disagreement can produce one: it is the server stating the session has no life left.
+   *
+   * Ignored if it is not a finite number, in which case `session_expires_at` is used instead.
+   */
+  session_expires_in?: number
 }
 
 /**

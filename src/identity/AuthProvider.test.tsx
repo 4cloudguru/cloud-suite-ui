@@ -820,6 +820,98 @@ describe('AuthProvider', () => {
       clearTimeoutSpy.mockRestore()
     })
 
+    // #181 -- session_expires_in is a DURATION, so no shared clock is assumed and skew cannot
+    // enter. It therefore wins over the absolute instant whenever the server sends both.
+    describe('session_expires_in supersedes the absolute instant (#181)', () => {
+      it('schedules from the duration and ignores a skewed absolute instant', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const api = makeApi({
+          user: { id: '1', email: 'a@b.com', name: 'Ada' },
+          memberships: [],
+          allowed_scopes: ['state:read'],
+          // Absolute instant is long lapsed against this clock -- i.e. exactly the severe-skew
+          // shape that #178 has to defend against. The duration says five minutes remain.
+          session_expires_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+          session_expires_in: 5 * 60,
+        })
+        render(
+          <AuthProvider api={api}>
+            <Probe />
+          </AuthProvider>,
+        )
+        await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+        // Proof the duration was used and not merely that the skew guard rescued us: a real
+        // expiry is SCHEDULED (the skew branch schedules nothing and leaves this blank).
+        expect(screen.getByTestId('expires-at')).not.toHaveTextContent('')
+        expect(screen.getByTestId('expires-soon')).toHaveTextContent('false')
+        // The skew branch was never reached, so nothing was warned about the clock.
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('clock'))
+        warn.mockRestore()
+      })
+
+      it('falls back to the absolute instant when the duration is absent', async () => {
+        const expires = new Date(Date.now() + 5 * 60 * 1000)
+        const api = makeApi({
+          user: { id: '1', email: 'a@b.com', name: 'Ada' },
+          memberships: [],
+          allowed_scopes: ['state:read'],
+          session_expires_at: expires.toISOString(),
+        })
+        render(
+          <AuthProvider api={api}>
+            <Probe />
+          </AuthProvider>,
+        )
+        await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+        expect(screen.getByTestId('expires-at')).toHaveTextContent(expires.toISOString())
+      })
+
+      it('ignores a non-finite duration rather than scheduling from NaN', async () => {
+        const expires = new Date(Date.now() + 5 * 60 * 1000)
+        const api = makeApi({
+          user: { id: '1', email: 'a@b.com', name: 'Ada' },
+          memberships: [],
+          allowed_scopes: ['state:read'],
+          session_expires_at: expires.toISOString(),
+          // A backend emitting a non-number here must not take the session down with it:
+          // Date.now() + NaN is NaN, and setTimeout(fn, NaN) fires immediately.
+          session_expires_in: Number.NaN,
+        })
+        render(
+          <AuthProvider api={api}>
+            <Probe />
+          </AuthProvider>,
+        )
+        await waitFor(() => expect(screen.getByTestId('auth')).toHaveTextContent('true'))
+        expect(screen.getByTestId('expires-at')).toHaveTextContent(expires.toISOString())
+      })
+
+      it('fails closed on a non-positive duration', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        const onClearStorage = vi.fn()
+        const api = makeApi({
+          user: { id: '1', email: 'a@b.com', name: 'Ada' },
+          memberships: [],
+          allowed_scopes: ['state:read'],
+          // No clock disagreement can produce this: the server is stating there is no life left.
+          session_expires_in: 0,
+        })
+        render(
+          <AuthProvider api={api} onClearStorage={onClearStorage}>
+            <Probe />
+          </AuthProvider>,
+        )
+        await waitFor(() =>
+          expect(screen.getByTestId('auth-error')).toHaveTextContent('Session expired'),
+        )
+        expect(screen.getByTestId('auth')).toHaveTextContent('false')
+        expect(onClearStorage).toHaveBeenCalled()
+        // Fail-closed, not the skew branch.
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('clock'))
+        warn.mockRestore()
+      })
+    })
+
     // #71 backlog: "scheduleSessionWarning NaN → immediate warning".
     it('a malformed session_expires_at does not immediately warn', async () => {
       const api = makeApi({
