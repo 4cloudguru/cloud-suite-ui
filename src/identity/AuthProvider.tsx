@@ -32,6 +32,17 @@ export const SESSION_WARNING_LEAD_MS = 2 * 60 * 1000
 // scheduling a comfortable margin below that ceiling rather than at the exact boundary.
 const MAX_TIMEOUT_MS = 2 ** 31 - 1 - 60_000
 
+/**
+ * Where an expiry instant came from, which decides whether an already-lapsed one may be
+ * trusted enough to end the session.
+ *
+ * - `server-absolute` — the server's own `session_expires_at`, read against a clock we do not
+ *   control. A lapsed value is evidence of clock skew, not of expiry (#178).
+ * - `client-relative` — computed here as `Date.now() + expires_in`, so it shares this clock
+ *   with the comparison and a lapsed value is real.
+ */
+type ExpiryOrigin = 'server-absolute' | 'client-relative'
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function useAuth(): AuthContextType {
@@ -239,7 +250,7 @@ export function AuthProvider({
   }, [resetSessionState])
 
   const scheduleSessionWarning = useCallback(
-    (expiresAt: Date) => {
+    (expiresAt: Date, origin: ExpiryOrigin) => {
       clearSessionTimers()
       const time = expiresAt.getTime()
       if (!Number.isFinite(time)) {
@@ -255,12 +266,39 @@ export function AuthProvider({
         // immediately). Re-check closer to expiry instead of silently never warning/expiring.
         setSessionExpiresAt(expiresAt)
         setSessionExpiresSoon(false)
-        warnTimer.current = setTimeout(() => scheduleSessionWarning(expiresAt), MAX_TIMEOUT_MS)
+        warnTimer.current = setTimeout(() => scheduleSessionWarning(expiresAt, origin), MAX_TIMEOUT_MS)
         return
       }
       if (maxDelay <= 0) {
-        // Already lapsed by the time this resolved — fail closed immediately rather than
-        // rendering a warning for a session the client already knows is dead.
+        if (origin === 'server-absolute') {
+          // NOT an expiry — a clock disagreement, and failing closed here is a hard lockout.
+          //
+          // The server just answered /me with 200 for this session. A 200 whose own
+          // session_expires_at is already in the past is self-contradictory: the server both
+          // accepted the session and dated it as over. The only consistent reading is that the
+          // two clocks disagree by more than the session's remaining lifetime — a VM resumed
+          // from suspend, a drifting container RTC, or a workstation whose NTP has not yet
+          // corrected after boot. A genuinely expired session does not reach here at all; it
+          // 401s, and loadUser's catch fails it closed.
+          //
+          // Expiring anyway re-arms on EVERY /me, so the user cannot get past login however
+          // often they retry, with nothing on screen to explain it. So do what the malformed
+          // branch above does when the delay cannot be trusted: schedule nothing, and leave the
+          // session to be ended by the first real 401. Enforcement was always server-side; this
+          // timer is a UI courtesy and must not outrank the server's own answer (#178).
+          console.warn(
+            'AuthProvider: the session expiry supplied by the server is already in the past ' +
+            'against this browser\'s clock, which means the two disagree by more than the ' +
+            'remaining session lifetime. Check the client clock/NTP. Not scheduling an expiry ' +
+            'for a session the server just accepted.',
+          )
+          setSessionExpiresAt(null)
+          setSessionExpiresSoon(false)
+          return
+        }
+        // Client-relative: derived from our own arithmetic on the server's expires_in, so both
+        // sides of the subtraction come from this clock and skew cancels. A non-positive delay
+        // here means the server really did hand back an already-dead lifetime. Fail closed.
         expireSession()
         return
       }
@@ -324,7 +362,7 @@ export function AuthProvider({
           : null,
       )
       if (me.session_expires_at) {
-        scheduleSessionWarning(new Date(me.session_expires_at))
+        scheduleSessionWarning(new Date(me.session_expires_at), 'server-absolute')
       } else {
         // A later /me that omits the expiry must clear any prior schedule/warning rather than
         // leaving a stale "session expiring soon" banner armed.
@@ -459,7 +497,7 @@ export function AuthProvider({
       // Discard if a logout / unmount happened during the refresh (#98) — the rotated
       // credential is simply not applied to a session that already ended.
       if (gen !== generation.current || !mounted.current) return 'skipped'
-      scheduleSessionWarning(new Date(Date.now() + expires_in * 1000))
+      scheduleSessionWarning(new Date(Date.now() + expires_in * 1000), 'client-relative')
       // Re-resolve /me so a server-side scope/role change made during the session is not
       // frozen for the tab's lifetime by a credential-only rotation (#99).
       await loadUser(gen)
