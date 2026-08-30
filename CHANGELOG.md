@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.11.1](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.11.0...v0.11.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **identity:** treat a lapsed server expiry as clock skew, not as an expiry ([#180](https://github.com/4cloudguru/cloud-suite-ui/issues/180)) ([d0bb148](https://github.com/4cloudguru/cloud-suite-ui/commit/d0bb148779e3c59349353624e2afcd27f7f2ccae))
+
 ## [0.11.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.10.0...v0.11.0) (2026-08-28)
 
 
