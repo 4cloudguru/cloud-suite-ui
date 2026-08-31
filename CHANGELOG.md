@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.13.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.12.0...v0.13.0) (2026-08-31)
+
+
+### Features
+
+* **ci:** adopt the shared Dependabot CI-health check ([#187](https://github.com/4cloudguru/cloud-suite-ui/issues/187)) ([53fc329](https://github.com/4cloudguru/cloud-suite-ui/commit/53fc329e6faf664bf0115450a0c37d9e49a87666))
+
 ## [0.12.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.11.1...v0.12.0) (2026-08-30)
 
 
