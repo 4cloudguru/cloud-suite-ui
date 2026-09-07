@@ -44,7 +44,7 @@ jobs:
       #   harden-runner has never run in this repository, so no endpoint baseline
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
 
@@ -163,7 +163,7 @@ jobs:
       # CycloneDX BOM of the full dependency graph. Generated here (unprivileged) and attested in
       # the publish job. Release-asset upload is disabled so this job needs no contents: write.
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: .
           format: cyclonedx-json
@@ -199,7 +199,7 @@ jobs:
       # pre-built artifact and publishes/attests it), so its egress needs are fixed and known —
       # allowlist them instead of just auditing, since this job holds the registry/OIDC/
       # attestation credentials a compromised dependency would want to exfiltrate.
-      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: block
           allowed-endpoints: >
