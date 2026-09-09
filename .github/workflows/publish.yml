@@ -95,9 +95,40 @@ jobs:
 
       - run: npm run build
 
-      # Re-run the advisory audit at publish time (mirrors ci.yml) so a workflow_dispatch
-      # re-publish of an older tag can't ship without a fresh advisory/signature check.
-      - run: npm audit --audit-level=moderate
+      # Re-run the advisory audit at publish time so a workflow_dispatch re-publish of an
+      # older tag can't ship without a fresh advisory/signature check.
+      #
+      # Scoped to what a consumer actually installs. This package declares no runtime
+      # `dependencies` (only peerDependencies -- react, MUI, i18next, etc., supplied by the
+      # consuming app -- and devDependencies) and ships `files: [dist, NOTICE]`, so nothing in
+      # the dev tree reaches the tarball; src/ never imports the dev-only tooling (commitlint,
+      # vitest, tsup) either, and tsup externalizes every peer dependency, so none of it is
+      # bundled into dist. With no runtime dependency graph today, this gate has little to
+      # audit -- it exists so blocking stays correctly scoped if/when a real runtime dependency
+      # is ever added.
+      - run: npm audit --omit=dev --audit-level=moderate
+
+      # The dev tree is still audited every publish, but reports a warning instead of failing,
+      # written as an explicit check rather than `continue-on-error` -- that rewrites a failed
+      # step's conclusion to success and hides the result, since only `outcome` records the
+      # truth and the API does not expose it.
+      #
+      # Blocking here deadlocks a release permanently. A tag's lockfile is frozen while this
+      # audit reads the live advisory database, so an advisory published after the tag was cut
+      # can never be fixed on that tag, and the version can never be shipped. That is exactly
+      # what stranded @4cloudguru/pipeline-task-core v0.9.2: js-yaml, reached only through
+      # commitlint -> cosmiconfig, marked dev in the lockfile, in a package that ships nothing
+      # from its dev tree. This repo carries the identical js-yaml 4.3.1 dev advisory right now
+      # for the same reason (same commitlint -> cosmiconfig chain) -- it ships in nothing here
+      # either (no runtime dependencies, files: [dist, NOTICE]) and cannot be fixed on a cut
+      # tag; fix it on main via Dependabot instead. The next person to touch this file: keep the
+      # gate above scoped to --omit=dev, or this deadlock re-arms.
+      - name: Report dev-tree advisories (informational)
+        run: |
+          if ! npm audit --audit-level=moderate; then
+            echo "::warning::Advisories present in the dev dependency tree. They ship in nothing (no runtime dependencies, files: [dist, NOTICE]) and cannot be fixed on a cut tag -- fix them on main."
+          fi
+
       - run: npm audit signatures
 
       - name: Verify the publish tarball contains exactly dist + docs (no more, no fewer)
