@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file. It is maintaine
 automatically by [release-please](https://github.com/googleapis/release-please)
 from [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.13.1](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.13.0...v0.13.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **ci:** scope the publish audit gate to production dependencies ([#199](https://github.com/4cloudguru/cloud-suite-ui/issues/199)) ([443831c](https://github.com/4cloudguru/cloud-suite-ui/commit/443831cdf382e006a8a608369b4a7fa14523fc35))
+
 ## [0.13.0](https://github.com/4cloudguru/cloud-suite-ui/compare/v0.12.0...v0.13.0) (2026-08-31)
 
 
