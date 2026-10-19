@@ -44,7 +44,7 @@ jobs:
       #   harden-runner has never run in this repository, so no endpoint baseline
       #   exists and a block policy written without one fails closed on its first run;
       #   audit is what produces that list
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
 
@@ -57,7 +57,7 @@ jobs:
 
       # package-manager-cache disabled: release-triggered job — zizmor flags setup-node v7's
       # auto-enabled cache here as a cache-poisoning risk even though npm ci runs below.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -194,7 +194,7 @@ jobs:
       # CycloneDX BOM of the full dependency graph. Generated here (unprivileged) and attested in
       # the publish job. Release-asset upload is disabled so this job needs no contents: write.
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: cyclonedx-json
@@ -203,7 +203,7 @@ jobs:
           upload-release-assets: false
 
       - name: Upload publish artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: publish-artifacts
           path: |
@@ -230,7 +230,7 @@ jobs:
       # pre-built artifact and publishes/attests it), so its egress needs are fixed and known —
       # allowlist them instead of just auditing, since this job holds the registry/OIDC/
       # attestation credentials a compromised dependency would want to exfiltrate.
-      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -245,7 +245,7 @@ jobs:
       # package-manager-cache disabled: this job never installs deps (only publishes the
       # pre-built artifact below), so the cache would be both useless and a cache-poisoning
       # risk (zizmor) in this release-triggered, privileged job.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -253,7 +253,7 @@ jobs:
           package-manager-cache: false
 
       - name: Download publish artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: publish-artifacts
 
